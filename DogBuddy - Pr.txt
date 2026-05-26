@@ -1,0 +1,866 @@
+# DogBuddy — Product Requirements Document (PRD)
+
+**Version:** 1.0 (Prototype)
+**Audience:** Engineering interns building v1
+**Read first:** `Vision.md`
+**Status:** Mock data prototype — feels real, runs locally
+
+---
+
+## 0. How to use this document
+
+This PRD is the **single source of truth** for what to build. If something is not in this document, do not build it. If something is unclear, ask before assuming.
+
+Build order is listed in Section 14. Do not skip ahead.
+
+---
+
+## 1. Product summary
+
+DogBuddy is a staff-only web application for dog boarding facilities. It has three screens — **Login**, **Today's Dashboard**, and **DogBuddy Chat** — and one AI agent that can read data, update statuses, log incidents, and research dog health using live web search.
+
+The prototype uses mock data populated by a seed script. The data must feel real.
+
+---
+
+## 2. Tech stack (locked)
+
+Use exactly these. Do not substitute without approval.
+
+### Backend
+- **Language:** Python 3.11+
+- **Framework:** FastAPI (latest)
+- **Database:** SQLite via SQLAlchemy 2.0+
+- **Auth:** JWT (via `python-jose`) + bcrypt (via `passlib`)
+- **Agent framework:** `deepagents` (latest) + `langgraph` + `langchain`
+- **LLM:** OpenAI `gpt-4o-mini` (via `langchain-openai`)
+- **Web search:** Parallel AI Search API (via `httpx`)
+- **Streaming:** Server-Sent Events (SSE) via `sse-starlette`
+- **Env management:** `python-dotenv`
+
+### Frontend
+- **Framework:** Next.js 14 (App Router) + TypeScript
+- **Styling:** Tailwind CSS 3+ (no shadcn for prototype — vanilla Tailwind)
+- **State:** React `useState` and `useContext` (no Redux/Zustand for v1)
+- **HTTP client:** Native `fetch`
+- **Streaming:** Native `fetch` with `ReadableStream` reader
+- **Icons:** `lucide-react`
+
+### Tools
+- **Package manager:** `pip` (backend), `npm` (frontend)
+- **Formatter:** `black` (Python), `prettier` (TS)
+- **Linter:** `ruff` (Python), `eslint` (TS)
+
+---
+
+## 3. Repository structure (exact)
+
+```
+dogbuddy/
+├── README.md                          # Setup + run instructions
+├── Vision.md                          # Provided
+├── PRD.md                             # Provided (this file)
+├── .gitignore
+│
+├── backend/
+│   ├── main.py                        # FastAPI entry, all endpoints
+│   ├── db.py                          # SQLAlchemy models + session
+│   ├── auth.py                        # JWT + bcrypt + dependencies
+│   ├── seed.py                        # Mock data populator
+│   ├── schemas.py                     # Pydantic request/response models
+│   ├── agent/
+│   │   ├── __init__.py
+│   │   ├── graph.py                   # DeepAgent setup + invoke function
+│   │   ├── tools.py                   # 4 tools: query_db, update_status,
+│   │   │                              #          log_incident, web_search
+│   │   ├── prompts/
+│   │   │   └── main_system.md         # System prompt
+│   │   └── skills/
+│   │       ├── medication_safety.md   # Loaded inline in system prompt
+│   │       └── incident_logging.md    # Loaded inline in system prompt
+│   ├── requirements.txt
+│   ├── .env.example
+│   └── dogbuddy.db                    # SQLite (gitignored)
+│
+└── frontend/
+    ├── app/
+    │   ├── layout.tsx                 # Root layout, dark mode, fonts
+    │   ├── page.tsx                   # Redirects: logged in → /dashboard, else → /login
+    │   ├── login/
+    │   │   └── page.tsx               # Login screen
+    │   ├── dashboard/
+    │   │   └── page.tsx               # Today's dogs
+    │   └── chat/
+    │       └── page.tsx               # DogBuddy chat
+    ├── components/
+    │   ├── DogCard.tsx                # Single dog in the list
+    │   ├── DogDetailModal.tsx         # Expanded dog info
+    │   ├── ChatBox.tsx                # Chat UI with streaming
+    │   ├── ChatMessage.tsx            # Single message bubble
+    │   ├── BottomNav.tsx              # Dashboard ↔ Chat
+    │   └── StatusBadge.tsx            # Status pill
+    ├── lib/
+    │   ├── api.ts                     # Fetch wrapper with JWT
+    │   ├── auth.ts                    # Token storage + role
+    │   ├── types.ts                   # Shared TS types
+    │   └── time.ts                    # Relative time formatting
+    ├── public/
+    │   └── (placeholder dog avatars)
+    ├── package.json
+    ├── tailwind.config.ts
+    ├── tsconfig.json
+    ├── next.config.js
+    └── .env.local.example
+```
+
+---
+
+## 4. Data model (SQLite schema)
+
+Five tables. Use SQLAlchemy 2.0 declarative models.
+
+### `staff`
+| Column          | Type      | Constraints                  | Notes                          |
+|-----------------|-----------|------------------------------|--------------------------------|
+| `id`            | INTEGER   | PK, autoincrement            |                                |
+| `name`          | TEXT      | NOT NULL                     |                                |
+| `phone`         | TEXT      | NOT NULL, UNIQUE             | Login identifier               |
+| `password_hash` | TEXT      | NOT NULL                     | bcrypt                         |
+| `created_at`    | DATETIME  | NOT NULL, default=now        |                                |
+
+### `dogs`
+| Column                 | Type      | Constraints              | Notes                                  |
+|------------------------|-----------|--------------------------|----------------------------------------|
+| `id`                   | INTEGER   | PK, autoincrement        |                                        |
+| `name`                 | TEXT      | NOT NULL                 |                                        |
+| `breed`                | TEXT      | NOT NULL                 |                                        |
+| `age_years`            | INTEGER   | NOT NULL                 |                                        |
+| `weight_kg`            | REAL      | NOT NULL                 |                                        |
+| `diet`                 | TEXT      |                          | Free text                              |
+| `medications`          | TEXT      |                          | Free text, comma-separated for v1      |
+| `allergies`            | TEXT      |                          | Free text                              |
+| `vaccination_status`   | TEXT      | NOT NULL                 | "up_to_date" / "expiring_soon" / "expired" |
+| `vaccination_expires`  | DATE      |                          |                                        |
+| `owner_name`           | TEXT      | NOT NULL                 |                                        |
+| `owner_phone`          | TEXT      | NOT NULL                 |                                        |
+| `vet_contact`          | TEXT      |                          | Free text (name + phone)               |
+| `notes`                | TEXT      |                          | Free text                              |
+| `created_at`           | DATETIME  | NOT NULL, default=now    |                                        |
+
+### `bookings`
+| Column            | Type      | Constraints               | Notes                                            |
+|-------------------|-----------|---------------------------|--------------------------------------------------|
+| `id`              | INTEGER   | PK, autoincrement         |                                                  |
+| `dog_id`          | INTEGER   | NOT NULL, FK → dogs.id    |                                                  |
+| `start_date`      | DATE      | NOT NULL                  |                                                  |
+| `end_date`        | DATE      | NOT NULL                  |                                                  |
+| `status`          | TEXT      | NOT NULL                  | "scheduled" / "checked_in" / "in_care" / "checked_out" |
+| `kennel_id`       | TEXT      |                           | e.g. "K-04"                                      |
+| `last_walked_at`  | DATETIME  |                           |                                                  |
+| `last_fed_at`     | DATETIME  |                           |                                                  |
+| `last_meds_at`    | DATETIME  |                           |                                                  |
+| `created_at`      | DATETIME  | NOT NULL, default=now     |                                                  |
+
+### `incidents`
+| Column        | Type      | Constraints                | Notes                                      |
+|---------------|-----------|----------------------------|--------------------------------------------|
+| `id`          | INTEGER   | PK, autoincrement          |                                            |
+| `dog_id`      | INTEGER   | NOT NULL, FK → dogs.id     |                                            |
+| `staff_id`    | INTEGER   | NOT NULL, FK → staff.id    |                                            |
+| `type`        | TEXT      | NOT NULL                   | "health" / "behavior" / "feeding" / "other" |
+| `severity`    | TEXT      | NOT NULL                   | "mild" / "moderate" / "severe"             |
+| `description` | TEXT      | NOT NULL                   |                                            |
+| `created_at`  | DATETIME  | NOT NULL, default=now      |                                            |
+
+### `audit_log`
+| Column        | Type      | Constraints                | Notes                                                   |
+|---------------|-----------|----------------------------|---------------------------------------------------------|
+| `id`          | INTEGER   | PK, autoincrement          |                                                         |
+| `staff_id`    | INTEGER   | NOT NULL, FK → staff.id    |                                                         |
+| `action`      | TEXT      | NOT NULL                   | e.g. "update_status", "log_incident"                    |
+| `target_type` | TEXT      | NOT NULL                   | e.g. "booking", "incident"                              |
+| `target_id`   | INTEGER   | NOT NULL                   |                                                         |
+| `details`     | TEXT      |                            | JSON string with before/after or context                |
+| `created_at`  | DATETIME  | NOT NULL, default=now      |                                                         |
+
+---
+
+## 5. Mock seed data (exact)
+
+Run via `python seed.py`. Creates the following.
+
+### One staff account
+- **Name:** Anand
+- **Phone:** `9999900001`
+- **Password:** `dogbuddy123`
+
+### Eight dogs with realistic data
+
+Use this exact list. Vary timestamps so the dashboard feels alive (some dogs walked recently, some overdue).
+
+| Name     | Breed              | Age | Weight | Owner          | Owner Phone   | Status        | Notes                              |
+|----------|--------------------|-----|--------|----------------|---------------|---------------|------------------------------------|
+| Rex      | Golden Retriever   | 4   | 28 kg  | Priya Sharma   | 9876543210    | scheduled     | Friendly, loves tennis balls       |
+| Bruno    | Labrador           | 7   | 32 kg  | Rohit Mehta    | 9876543211    | checked_in    | Allergic to chicken                |
+| Charlie  | Beagle             | 3   | 12 kg  | Ananya Iyer    | 9876543212    | in_care       | On daily thyroid medication        |
+| Bella    | German Shepherd    | 5   | 30 kg  | Karan Singh    | 9876543213    | in_care       | Reactive to other dogs, walk alone |
+| Max      | Pug                | 6   | 9 kg   | Tara Kapoor    | 9876543214    | in_care       | Snores, breathing issues in heat   |
+| Luna     | Indie / Mixed      | 2   | 18 kg  | Sneha Reddy    | 9876543215    | in_care       | Recently adopted, shy              |
+| Coco     | Shih Tzu           | 8   | 6 kg   | Vikram Joshi   | 9876543216    | checked_out   | Senior dog, gentle handling        |
+| Simba    | Rottweiler         | 4   | 42 kg  | Aisha Khan     | 9876543217    | checked_out   | Strong puller on leash             |
+
+### Booking dates
+- `scheduled` dogs: `start_date` = today, `end_date` = today + 3 days
+- `checked_in` and `in_care` dogs: `start_date` = today − 1 day, `end_date` = today + 2 days
+- `checked_out` dogs: `start_date` = today − 3 days, `end_date` = today
+
+### Realistic activity timestamps
+For `in_care` dogs, set varied `last_walked_at`, `last_fed_at`, `last_meds_at`:
+- Some 30 min ago, some 2 hours ago, some 6 hours ago (creates "overdue" feel)
+
+### Three pre-existing incidents
+- Charlie: "health", "mild", "Skipped breakfast this morning", 2 hours ago
+- Bella: "behavior", "moderate", "Growled at Max during morning walk overlap", yesterday
+- Max: "health", "mild", "Heavy panting after outdoor time, moved to AC area", yesterday
+
+### Vaccination variety
+- 6 dogs: `up_to_date`
+- 1 dog (Coco): `expiring_soon` (expires in 14 days)
+- 1 dog (Simba): `expired` (expired 30 days ago)
+
+This variety lets DogBuddy answer questions like "whose vaccinations are expiring?" believably.
+
+---
+
+## 6. Backend API specification
+
+All endpoints return JSON. Errors use HTTP status codes + `{"detail": "message"}`.
+
+All endpoints except `/auth/signup` and `/auth/login` require `Authorization: Bearer <JWT>`.
+
+### Auth endpoints
+
+#### `POST /auth/signup`
+**Body:**
+```json
+{ "name": "string", "phone": "string", "password": "string" }
+```
+**Returns 201:**
+```json
+{ "token": "jwt_string", "staff": { "id": 1, "name": "...", "phone": "..." } }
+```
+**Errors:**
+- 400 if phone already exists
+- 422 if body validation fails
+
+#### `POST /auth/login`
+**Body:**
+```json
+{ "phone": "string", "password": "string" }
+```
+**Returns 200:**
+```json
+{ "token": "jwt_string", "staff": { "id": 1, "name": "...", "phone": "..." } }
+```
+**Errors:**
+- 401 if invalid credentials
+
+#### `GET /auth/me`
+**Returns 200:**
+```json
+{ "id": 1, "name": "...", "phone": "..." }
+```
+
+### Dog endpoints
+
+#### `GET /dogs`
+Returns all dogs in the facility.
+```json
+[ { "id": 1, "name": "Rex", "breed": "...", ... }, ... ]
+```
+
+#### `GET /dogs/{id}`
+Returns one dog with full details + current booking + recent incidents.
+
+### Booking endpoints
+
+#### `GET /bookings/today`
+Returns bookings active today, grouped by status:
+```json
+{
+  "checking_in": [ { "booking_id": 1, "dog": { ... }, "kennel_id": "K-01" }, ... ],
+  "in_care":     [ ... ],
+  "checking_out": [ ... ]
+}
+```
+
+#### `PATCH /bookings/{id}/status`
+**Body:**
+```json
+{ "status": "checked_in" | "in_care" | "checked_out" }
+```
+Returns updated booking. Writes an `audit_log` entry.
+
+#### `PATCH /bookings/{id}/activity`
+**Body:**
+```json
+{ "activity": "walk" | "feed" | "meds" }
+```
+Updates the corresponding `last_*_at` to now. Writes an `audit_log` entry.
+
+### Incident endpoints
+
+#### `POST /incidents`
+**Body:**
+```json
+{
+  "dog_id": 1,
+  "type": "health" | "behavior" | "feeding" | "other",
+  "severity": "mild" | "moderate" | "severe",
+  "description": "string"
+}
+```
+Returns the created incident. `staff_id` is taken from the JWT. Writes `audit_log`.
+
+#### `GET /incidents/recent`
+Returns the last 20 incidents across all dogs, most recent first.
+
+### Chat endpoint
+
+#### `POST /chat` (Server-Sent Events)
+**Body:**
+```json
+{ "message": "string", "thread_id": "string" }
+```
+**Stream format:** SSE events
+```
+event: token
+data: {"content": "Looking"}
+
+event: tool_call
+data: {"name": "query_db", "args": {...}}
+
+event: tool_result
+data: {"name": "query_db", "result_summary": "Found 4 dogs"}
+
+event: token
+data: {"content": " up Rex..."}
+
+event: done
+data: {}
+```
+
+`thread_id` is generated client-side per session and persists across messages so the agent has memory. Use the staff_id + date as the thread_id (e.g. `"staff_1_2026_05_26"`).
+
+---
+
+## 7. Agent specification
+
+### Framework
+Use `deepagents` (latest version, pinned in `requirements.txt`).
+
+### Model
+- **Primary:** OpenAI `gpt-4o-mini` (cost + speed balance)
+- **Temperature:** 0.3 (slight warmth, mostly factual)
+
+### System prompt
+Stored at `backend/agent/prompts/main_system.md`. Loaded at agent init.
+
+```markdown
+You are DogBuddy — an AI copilot for dog boarding facility staff.
+
+# Your role
+You help staff manage 15–30 dogs at once. You are their senior colleague:
+fast, accurate, never judgmental. You can update records, look up information,
+log incidents, and research dog health topics on the live web.
+
+# Hard rules (never break these)
+1. SAFETY FIRST. For any question about medication, dosage, diagnosis, or
+   treatment, always say "consult the facility vet." Never give doses.
+   Never diagnose. Never recommend treatment.
+2. CONFIRM before destructive actions. Before marking a dog as checked out
+   or logging a severe incident, briefly confirm with the staff member.
+3. NEVER make up facility data. If you don't know, query the database.
+   If the database doesn't have it, say so.
+4. ALWAYS cite sources when researching health topics on the web.
+
+# How you work
+- Use the right tool for the question:
+  - Internal facility questions → query_db
+  - Updating a booking → update_status
+  - Logging an issue → log_incident
+  - General health/breed/behavior research → web_search
+- Reply naturally. Don't say "I'll call the tool now." Just do it.
+- Keep responses short. Staff are busy.
+
+# Today's context
+Date: {today}
+Staff on duty: {staff_name}
+Facility: DogBuddy Boarding (single location prototype)
+
+# Skills (read these before acting on relevant topics)
+{medication_safety_skill}
+{incident_logging_skill}
+```
+
+The `{...}` placeholders are filled at agent invocation time. The skill files are inlined here in v1 (not read on-demand).
+
+### Skills
+
+#### `backend/agent/skills/medication_safety.md`
+```markdown
+# Skill: Medication Safety
+
+When a staff member asks about ANY of the following, follow this skill:
+- Medication doses (any drug, any dog)
+- Whether to give a medication
+- Mixing medications
+- Suspected poisoning or overdose
+- Diagnosing a condition
+- Treating a condition
+
+## Required response pattern
+1. Provide general, educational information ONLY (e.g. "chocolate contains
+   theobromine which is toxic to dogs")
+2. NEVER give a specific dose, even if asked directly
+3. ALWAYS end with: "For dosing, diagnosis, or treatment, consult your facility vet immediately."
+4. For suspected emergencies (poisoning, seizure, severe bleeding, choking),
+   say "This sounds urgent — call your vet now" FIRST, then provide info.
+
+## Forbidden phrases
+- "Give X mg of Y"
+- "The safe dose is..."
+- "You can treat this with..."
+- "It's probably just..."
+- "Don't worry, it's normal"
+
+## Always-include phrases
+- "Consult the facility vet"
+- "For diagnosis, talk to your vet"
+- "I can share general information, but treatment decisions need a vet"
+```
+
+#### `backend/agent/skills/incident_logging.md`
+```markdown
+# Skill: Incident Logging
+
+When a staff member reports something happened to a dog, log it as an incident.
+
+## Severity guide
+- **mild**: skipped meal, minor scuffle with no contact, mild limp, vomiting once
+- **moderate**: physical altercation, refusing food >24h, persistent limping,
+  diarrhea, unusual lethargy
+- **severe**: injury with bleeding, seizure, suspected poisoning, dog attack,
+  prolonged vomiting, unresponsive
+
+## Required fields
+- `dog_id`: which dog
+- `type`: health / behavior / feeding / other
+- `severity`: as above
+- `description`: clear, factual, what happened (no opinions)
+
+## Response pattern
+1. Confirm the dog (look up by name → get id)
+2. Confirm severity based on description
+3. Log via the log_incident tool
+4. Reply with: "✅ Logged for [dog name] — [type], [severity]. {next-action if needed}"
+5. For severe incidents, add: "⚠️ This sounds serious. Notify the manager and consider calling the vet."
+```
+
+### Tools
+
+Define four tools using LangChain's `@tool` decorator. Each must have a clear docstring (the agent reads these to decide when to use the tool).
+
+#### Tool 1: `query_db`
+```python
+@tool
+def query_db(query_type: str, params: dict = None) -> str:
+    """
+    Query the facility database. Use this for any question about dogs,
+    bookings, owners, or incidents in the facility.
+
+    query_type options:
+    - "todays_bookings": all dogs in facility today (no params)
+    - "dog_by_name": get dog details (params: {"name": "Rex"})
+    - "pending_tasks": dogs needing walk/feed/meds (params: {"task": "walk"})
+    - "recent_incidents": last 20 incidents (no params)
+    - "vaccination_status": dogs with expiring/expired vaccines (no params)
+
+    Returns: a human-readable summary string.
+    """
+```
+
+#### Tool 2: `update_status`
+```python
+@tool
+def update_status(dog_name: str, action: str) -> str:
+    """
+    Update a dog's status or activity.
+
+    action options:
+    - "check_in": mark dog as checked in
+    - "in_care": mark dog as in care
+    - "check_out": mark dog as checked out (REQUIRES CONFIRMATION)
+    - "walked": record a walk now
+    - "fed": record feeding now
+    - "meds_given": record medication given now
+
+    Returns: confirmation string.
+    """
+```
+
+#### Tool 3: `log_incident`
+```python
+@tool
+def log_incident(dog_name: str, incident_type: str, severity: str, description: str) -> str:
+    """
+    Log an incident for a dog.
+
+    incident_type: "health" | "behavior" | "feeding" | "other"
+    severity: "mild" | "moderate" | "severe"
+    description: factual description of what happened
+
+    Returns: confirmation string with incident id.
+    """
+```
+
+#### Tool 4: `web_search`
+```python
+@tool
+def web_search(query: str) -> str:
+    """
+    Search the live web for general dog health, breed, behavior,
+    nutrition, training, or care information. Use this for questions
+    that are NOT about the specific facility's data.
+
+    DO NOT use this for medication dosing — always defer to the vet instead.
+
+    Returns: synthesized answer with citation URLs.
+    """
+```
+
+Implement `web_search` using Parallel AI Search API. Return a string with:
+- A 3–5 sentence synthesis
+- A "Sources:" section with up to 3 URLs
+
+### Error handling
+
+Every tool must be wrapped in `try/except` and return a sensible error string instead of raising. Example:
+```python
+try:
+    result = ...
+    return result
+except Exception as e:
+    return f"Could not complete that — {str(e)}. Try rephrasing or check the dashboard."
+```
+
+### Memory / threads
+
+Use LangGraph's built-in checkpointer with SQLite backend. The `thread_id` is sent from the frontend (format: `staff_{staff_id}_{YYYY_MM_DD}`). This gives each staff member a daily memory that resets at midnight.
+
+---
+
+## 8. Frontend specification
+
+### Design tokens
+
+Use Tailwind config with:
+- **Background:** `#0a0a0a` (near-black, dark mode default)
+- **Surface:** `#1a1a1a` (cards, modals)
+- **Border:** `#2a2a2a`
+- **Primary text:** `#f5f5f5`
+- **Muted text:** `#a3a3a3`
+- **Accent (primary):** `#34E9F7` (cyan)
+- **Success:** `#22c55e`
+- **Warning:** `#f59e0b`
+- **Danger:** `#ef4444`
+
+Use `Inter` font (Google Fonts).
+
+### Screen 1: Login (`/login`)
+
+**Layout:**
+- Centered card on dark background
+- DogBuddy logo (text-only is fine: "🐕 DogBuddy" in cyan)
+- Two inputs: phone, password
+- Primary button: "Log in"
+- Below: small text "Use the seeded account: 9999900001 / dogbuddy123" (visible only in dev)
+
+**Behavior:**
+- On submit → `POST /auth/login`
+- On success → store JWT in `localStorage` under key `dogbuddy_token`, store user in `localStorage` under `dogbuddy_user`
+- Redirect to `/dashboard`
+- On failure → show inline error in red
+
+### Screen 2: Today's Dashboard (`/dashboard`)
+
+**Layout (mobile-first):**
+- Top bar: "Today" title (left), staff name + logout (right)
+- Three collapsible sections (all expanded by default):
+  - **Checking In Today** (count badge)
+  - **In Care** (count badge)
+  - **Checking Out Today** (count badge)
+- Each section is a vertical list of `DogCard` components
+- Bottom nav: Dashboard (active) | Chat
+
+**DogCard component:**
+- Avatar placeholder (colored circle with dog's initial)
+- Dog name (bold, white)
+- Breed · Age (muted)
+- Owner name + phone (muted, smaller)
+- Status badge (colored pill)
+- Activity indicators row: "🚶 45m ago · 🍽️ 2h ago · 💊 1h ago" (relative times)
+- Tap → opens `DogDetailModal`
+
+**DogDetailModal:**
+- Full info: weight, diet, medications, allergies, vaccination status, vet contact, notes
+- Recent incidents for this dog (last 5)
+- Action buttons: "Mark Walked" "Mark Fed" "Mark Meds" — call `PATCH /bookings/{id}/activity`
+- Status change buttons (visible based on current status):
+  - If `scheduled` → "Check In"
+  - If `checked_in` or `in_care` → "Check Out"
+
+**Data fetching:**
+- `useEffect` calls `GET /bookings/today` on mount
+- Refresh button in top bar re-fetches
+- After any activity/status update, re-fetch automatically
+
+### Screen 3: DogBuddy Chat (`/chat`)
+
+**Layout:**
+- Top bar: "DogBuddy" title (left), back arrow (right) → goes to /dashboard
+- Scrollable message list (oldest at top, newest at bottom)
+- Sticky chat input at bottom with mic icon + text field + send button
+- Bottom nav: Dashboard | Chat (active)
+
+**Message bubbles:**
+- User messages: right-aligned, cyan background, white text
+- DogBuddy messages: left-aligned, dark surface background, light text
+- Tool calls: show a small inline indicator "🔧 Updating Rex's status..."
+- Tool results: render naturally inline (no separate bubble)
+- Citations: render as small footnote-style links below the message
+
+**Streaming:**
+- New DogBuddy message starts as empty bubble with cursor blink
+- Tokens append in real time as SSE events arrive
+- "DogBuddy is thinking..." indicator before first token
+- On `done` event, cursor stops
+
+**Voice input:**
+- Mic button → uses Web Speech API (`SpeechRecognition`)
+- Tap mic → recording starts, button turns red, words appear in input
+- Tap again → stops recording, user can edit and send
+
+**Empty state (first time):**
+Show 4 suggested prompt chips above the input:
+- "Who's in today?"
+- "What does Bruno eat?"
+- "Mark Rex as checked in"
+- "Symptoms of heatstroke in dogs?"
+
+Tapping a chip fills the input — user still has to press send.
+
+**Thread management:**
+- Generate thread_id on first message: `staff_{staff_id}_{YYYY_MM_DD}`
+- Send same thread_id with every message that day
+- New day → new thread (handled client-side)
+
+### Bottom Nav
+
+Two icons + labels:
+- 🏠 Dashboard
+- 💬 Chat
+
+Active state: cyan icon + text. Inactive: muted gray.
+
+### Auth gating
+
+- Root layout checks `localStorage` for token on mount
+- If no token and path is not `/login` → redirect to `/login`
+- If token and path is `/login` → redirect to `/dashboard`
+
+### Logout
+
+- Top bar of dashboard has a small "Logout" link
+- Clears `localStorage` and redirects to `/login`
+
+---
+
+## 9. Environment variables
+
+### Backend `.env`
+```
+OPENAI_API_KEY=sk-...
+PARALLEL_API_KEY=...
+JWT_SECRET=change-me-in-prod
+JWT_ALGORITHM=HS256
+JWT_EXPIRES_MINUTES=1440
+DATABASE_URL=sqlite:///./dogbuddy.db
+```
+
+### Frontend `.env.local`
+```
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+Provide `.env.example` files in both directories with these keys and empty values.
+
+---
+
+## 10. README.md requirements
+
+The README must include:
+
+1. **One-paragraph summary** of what DogBuddy is
+2. **Prerequisites** (Python 3.11+, Node 20+, OpenAI key, Parallel key)
+3. **Backend setup**:
+   ```
+   cd backend
+   python -m venv .venv && source .venv/bin/activate
+   pip install -r requirements.txt
+   cp .env.example .env  # then fill in keys
+   python seed.py
+   uvicorn main:app --reload --port 8000
+   ```
+4. **Frontend setup**:
+   ```
+   cd frontend
+   npm install
+   cp .env.local.example .env.local
+   npm run dev
+   ```
+5. **Test login**: phone `9999900001`, password `dogbuddy123`
+6. **What to try** (3 example chat prompts)
+7. **Known limitations** (paste from Vision.md section 7)
+
+---
+
+## 11. Acceptance criteria (must pass before considering v1 done)
+
+### Functional
+- [ ] Seeded staff account can log in
+- [ ] Dashboard loads with all 8 dogs grouped into the 3 sections correctly
+- [ ] Each dog card shows breed, owner, status, and relative activity timestamps
+- [ ] Tapping a dog opens detail modal with full info
+- [ ] "Mark Walked" updates `last_walked_at` and reflects on dashboard within 2 seconds
+- [ ] Check-in / check-out buttons change status correctly
+- [ ] DogBuddy chat sends a message, sees streaming reply
+- [ ] Chat correctly answers "who's in today?" with real seeded data
+- [ ] Chat correctly answers "what does Bruno eat?" (returns "Allergic to chicken")
+- [ ] Chat correctly logs an incident when told "Rex didn't eat dinner"
+- [ ] Chat correctly searches the web for "symptoms of heatstroke in dogs?" with citations
+- [ ] Chat refuses to give a medication dose when asked
+- [ ] All actions taken via chat appear in `audit_log` table
+- [ ] Refreshing the dashboard after a chat update shows the new state
+
+### Visual
+- [ ] Dark mode by default, no flash of white
+- [ ] Works on mobile viewport (375px wide)
+- [ ] Works on desktop (1280px wide)
+- [ ] All tap targets at least 44px on mobile
+- [ ] Tailwind colors match design tokens in Section 8
+
+### Code quality
+- [ ] No unused imports
+- [ ] `black .` and `ruff check .` pass on backend
+- [ ] `prettier --check` and `eslint` pass on frontend
+- [ ] No console errors in browser
+- [ ] No backend errors on standard flows
+- [ ] All endpoints return correct HTTP status codes
+
+---
+
+## 12. Out of scope (do not build)
+
+Re-stated from Vision.md for clarity:
+- No owner accounts or owner UI
+- No real bookings flow (only status management)
+- No photo uploads
+- No real notifications (SMS/email/push)
+- No payments
+- No multi-facility logic
+- No role hierarchy beyond "staff"
+- No vet integration beyond a text field
+- No offline mode
+- No password reset
+- No registration of new staff via UI (signup endpoint exists for testing only)
+
+If something is not specified in this PRD, **ask before building**.
+
+---
+
+## 13. Known prototype limitations (acceptable)
+
+These limitations are known and accepted for v1. Do not "fix" them unless instructed:
+
+- SQLite locks under concurrent writes (~3 staff max simultaneously fine)
+- No rate limiting on `/chat` (can burn OpenAI credits in dev — be mindful)
+- JWT stored in localStorage (vulnerable to XSS — fine for prototype, change for prod)
+- Web search has no caching (every research query hits Parallel API)
+- Agent memory resets daily (intentional for prototype simplicity)
+- No automated tests required for v1 (manual acceptance criteria above)
+- No CI/CD pipeline required for v1
+
+---
+
+## 14. Build order (follow this sequence)
+
+Do not skip ahead. Each step depends on the previous.
+
+### Phase 1: Backend foundation
+1. Set up `backend/` folder, virtualenv, `requirements.txt`
+2. Build `db.py` with all 5 SQLAlchemy models
+3. Build `seed.py` and verify data is created in SQLite
+4. Build `auth.py` with JWT + bcrypt + dependency injection
+5. Build `main.py` with auth endpoints (`/signup`, `/login`, `/me`)
+6. Test auth with `curl` or Postman
+
+### Phase 2: Backend domain
+7. Add `/dogs` endpoints
+8. Add `/bookings/today`, `/bookings/{id}/status`, `/bookings/{id}/activity`
+9. Add `/incidents` endpoints
+10. Verify audit logs are being written
+
+### Phase 3: Agent
+11. Build `agent/tools.py` — implement all 4 tools, each tested standalone
+12. Build `agent/graph.py` with DeepAgent setup + skills loaded inline
+13. Build `/chat` endpoint with SSE streaming
+14. Test agent with curl streaming → verify all 4 tool types fire correctly
+
+### Phase 4: Frontend foundation
+15. Set up `frontend/` with `create-next-app`, Tailwind, TS
+16. Build `lib/api.ts`, `lib/auth.ts`, `lib/types.ts`
+17. Build root layout with dark mode + auth gate
+18. Build `/login` screen with login flow → redirects to dashboard
+
+### Phase 5: Frontend dashboard
+19. Build `DogCard`, `StatusBadge`, `BottomNav` components
+20. Build `/dashboard` page with three sections
+21. Build `DogDetailModal` with status + activity buttons
+22. Wire up auto-refresh on actions
+
+### Phase 6: Frontend chat
+23. Build `ChatMessage` and `ChatBox` components
+24. Build `/chat` page with input + send + suggested chips
+25. Implement SSE streaming consumption in `fetch` reader
+26. Add voice input (Web Speech API)
+27. Test full chat flow end-to-end
+
+### Phase 7: Polish
+28. Verify all acceptance criteria (Section 11)
+29. Write `README.md`
+30. Run linters and formatters
+
+---
+
+## 15. Communication & questions
+
+If anything in this PRD is unclear, ask in the team channel before building. Do not guess.
+
+If you find a gap (something needed for v1 that isn't specified here), flag it — don't silently add scope.
+
+When you finish a phase, post a screenshot or short Loom showing it working.
+
+---
+
+**End of PRD.md**

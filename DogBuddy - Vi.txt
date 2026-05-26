@@ -1,0 +1,204 @@
+# DogBuddy — Vision
+
+**Version:** 1.0 (Prototype)
+**Audience:** Engineering interns building v1
+**Status:** Mock data prototype — must look and feel real
+
+---
+
+## 1. What we are building
+
+DogBuddy is a **staff-side web application** for dog boarding facilities.
+
+It runs on a phone or laptop. A staff member logs in, sees every dog in the facility today, and talks to an AI copilot — also called DogBuddy — to manage the day.
+
+The AI copilot can:
+- Answer questions about any dog in the facility
+- Update statuses (check-in, walks, feeding, medication, check-out)
+- Log incidents (illness, fights, behavior issues)
+- Research dog health topics on the live web
+
+This is the **staff version only**. There is no owner-facing app in v1. Owners exist in the system as contact information attached to each dog — not as users.
+
+---
+
+## 2. Why we are building it
+
+### The problem
+
+A boarding facility staff member is responsible for 15 to 30 dogs at once. Each dog has its own diet, medications, walk schedule, allergies, and quirks. The staff is constantly moving — leash in one hand, food bowl in the other — and the tools available to them today are broken:
+
+- **Their memory** fails under stress and across shift changes
+- **Paper notes** get lost, smudged, or contradicted
+- **Existing booking software** is form-based, slow, and built for office desks not kennel floors
+
+The result: dogs get fed twice. Medications get missed. Owners aren't updated. Incidents go unlogged. The night shift has no idea what happened during the day.
+
+### The opportunity
+
+Staff already know how to talk. They don't need to learn software. With DogBuddy, the most natural human action — typing or speaking what is happening — becomes the interface.
+
+Instead of "open booking → find dog → click status → select dropdown → save," the staff member just says **"Rex had his evening walk."** Done. Logged. Recorded.
+
+And when something unfamiliar happens — a breed-specific symptom, a question about medication safety, an emergency protocol — DogBuddy acts as an **always-on senior colleague**, surfacing information instantly without judgment.
+
+### The bet
+
+Most pet-care technology today is built for owners. DogBuddy is built for staff. The bet is simple: when staff have a great copilot, everything downstream improves — owner trust, dog welfare, repeat bookings, lower staff burnout, smoother shift handoffs.
+
+We are not replacing the vet. We are not replacing the trainer. We are not replacing the human caregiver.
+
+**We are replacing the clipboard.**
+
+---
+
+## 3. Who uses it
+
+A single user type: **Staff**.
+
+This includes kennel attendants, facility managers, and night shift workers. They all share the same role and the same screens in v1. Differences in experience or seniority show up in what they ask the AI, not in what the interface lets them do.
+
+---
+
+## 4. What the staff experience looks like
+
+DogBuddy has **three screens** and one bottom navigation bar.
+
+### Screen 1 — Login
+A simple login screen. Staff enters phone number and password. On first launch, a seeded staff account is available for the prototype.
+
+### Screen 2 — Today's Dashboard
+The home screen after login. Shows every dog in the facility right now, organized in a list:
+- **Checking in today** (top section)
+- **In care** (middle section)
+- **Checking out today** (bottom section)
+
+Each dog card shows: name, breed, owner contact, current status, and any pending tasks (walks, meds, feeding). Tapping a card opens a detail view with diet, allergies, vaccination status, and notes.
+
+### Screen 3 — DogBuddy Chat
+A full-screen chat with the AI copilot. The staff types or speaks. The AI replies, performs actions, or researches information. Responses stream in real time. Voice input is supported on mobile.
+
+---
+
+## 5. What DogBuddy (the AI) can do
+
+DogBuddy is an AI agent that performs four categories of work:
+
+### Read facility data
+- "Who's in today?"
+- "What does Rex eat?"
+- "When does Bruno's stay end?"
+- "Which dogs haven't been walked yet?"
+- "What is Charlie's owner's phone number?"
+
+### Update facility data
+- "Mark Rex as checked in"
+- "Bruno had his evening walk"
+- "Charlie got his meds at 2pm"
+- "Mark Max as checked out"
+
+### Log incidents
+- "Rex didn't eat dinner"
+- "Bella and Max had a fight, no injuries"
+- "Charlie is limping on his back leg"
+
+### Research dog health
+- "What causes loss of appetite in dogs?"
+- "Common health issues in German Shepherds?"
+- "Symptoms of heatstroke in dogs?"
+- "Is chocolate toxic to dogs?"
+
+For research questions, DogBuddy uses live web search (Parallel AI Search) and always shows citations.
+
+---
+
+## 6. The non-negotiable rule
+
+**For any question about medication, dosage, diagnosis, or treatment, DogBuddy must always say: "Consult the facility vet."**
+
+DogBuddy never gives medication doses. Never diagnoses. Never treats. It provides general information and points the staff member to the vet.
+
+This is a safety boundary. A wrong answer here could harm a dog. This rule is enforced in the system prompt and reinforced in a dedicated `medication_safety.md` skill file. Interns must not weaken this rule.
+
+---
+
+## 7. What v1 is NOT
+
+To keep the prototype focused, the following are **deliberately excluded** from v1:
+
+- No owner-facing app or login
+- No real-time notifications to owners (no SMS, email, push)
+- No photo or video uploads
+- No payments or invoicing
+- No multi-facility support (one facility only)
+- No staff-role hierarchy (everyone is "staff")
+- No vet integration (data field only, no booking or messaging)
+- No offline mode
+- No password reset flow
+- No real bookings — all data is mocked but must feel real
+
+These are v2+ features. The architecture should make them easy to add later, but interns should not build them now.
+
+---
+
+## 8. What "feels real" means
+
+The prototype runs on mock data, but it should not feel like a demo. It should feel like a real product on first use.
+
+This means:
+
+- **Real-sounding seed data.** 8–10 dogs with varied breeds, ages, real-sounding names, owner names, owner phone numbers, diets, medications, allergies, vaccination dates. A mix of statuses across the day.
+- **Realistic timestamps.** "Last walked 45 minutes ago" not "Last walked at 2024-01-01T00:00:00Z."
+- **A polished UI.** Dark mode by default. Large tap targets. Mobile-first. No raw form-builder aesthetics.
+- **Streaming chat.** The AI replies token by token, not in one block at the end.
+- **Functioning AI.** The chat actually works with OpenAI and Parallel AI Search. Not stubbed responses.
+- **Audit trail.** Every update DogBuddy makes is logged with the staff member who triggered it and the timestamp.
+
+A friend or investor should be able to log in, look at the dashboard, ask DogBuddy three things, and come away thinking *"this is a real product."*
+
+---
+
+## 9. The bigger picture (where this goes after v1)
+
+The staff app is the foundation. Once it works:
+
+- **v2:** Owner app — owners see live status, photos, daily reports, message the facility
+- **v3:** Vet integration — direct vet messaging, electronic health records, prescription tracking
+- **v4:** Multi-facility — chains and franchises, shared dog records across locations
+- **v5:** Voice-first — staff use DogBuddy hands-free via a wearable or headset
+
+Everything we build now should make these futures easier, not harder. But we don't build them now.
+
+---
+
+## 10. Principles for the build
+
+Interns building DogBuddy should hold these principles:
+
+1. **Staff first.** Every design decision is made for the person on the kennel floor with dirty hands and a leash in the other one.
+2. **Conversational beats clicky.** If a task can be done in chat, prefer chat.
+3. **Honesty over confidence.** DogBuddy should say "I don't know" or "consult the vet" instead of guessing.
+4. **Speed matters.** Streaming chat, fast page loads, responsive UI.
+5. **Mock data must feel real.** Boring placeholders ("Dog 1," "Owner A") break the illusion. Take time to seed the system with believable data.
+6. **Audit everything.** Every action DogBuddy takes is logged — who, what, when. This is non-negotiable for a care facility.
+7. **Structure for growth.** Build the prototype so v2 features can plug in without rewrites.
+
+---
+
+## 11. Success criteria for v1
+
+The prototype is done when:
+
+- A staff member can log in with the seeded account
+- The dashboard shows a believable, populated list of dogs across all three sections (checking in, in care, checking out)
+- DogBuddy can correctly answer all four categories of questions (read, update, log, research)
+- Status updates from DogBuddy reflect in the dashboard immediately
+- The medical guardrail fires correctly on medication-related questions
+- The UI looks polished on a phone and a laptop
+- The whole app runs locally with one command per service (backend + frontend)
+
+When you can show this to someone for 60 seconds and they say *"oh, this is actually useful,"* v1 is done.
+
+---
+
+**End of Vision.md**

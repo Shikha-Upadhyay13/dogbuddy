@@ -1,0 +1,26 @@
+# --- Web framework ---
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+sse-starlette>=2.1.0
+
+# --- Data ---
+SQLAlchemy>=2.0.30
+pydantic>=2.8.0
+
+# --- Auth ---
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+bcrypt>=4.0.1,<5.0.0
+
+# --- Config ---
+python-dotenv>=1.0.1
+
+# --- HTTP client (for Parallel AI search) ---
+httpx>=0.27.0
+
+# --- Agent stack ---
+langchain>=0.3.0
+langchain-openai>=0.2.0
+langgraph>=0.2.50
+langgraph-checkpoint-sqlite>=2.0.0
+deepagents>=0.0.1
