@@ -3,16 +3,27 @@
 Phase 1: /auth/*
 Phase 2: /dogs, /bookings/today, /bookings/{id}/status, /bookings/{id}/activity,
          /incidents, /incidents/recent
+Phase 3: /chat (SSE streaming)
 """
 
 from __future__ import annotations
 
+import json
+import sys
 from datetime import date, datetime
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sse_starlette.sse import EventSourceResponse
+
+# Force UTF-8 stdout so Windows cp1252 doesn't crash on Unicode in prompts/logs.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+    sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+except Exception:
+    pass
 
 from audit import write_audit
 from auth import (
@@ -27,6 +38,7 @@ from schemas import (
     AuthResponse,
     BookingOut,
     BookingsTodayOut,
+    ChatRequest,
     DogDetailOut,
     DogOut,
     IncidentIn,
@@ -50,8 +62,18 @@ app.add_middleware(
 
 
 @app.on_event("startup")
-def on_startup() -> None:
+async def on_startup() -> None:
     init_db()
+    # Pre-open the async checkpointer so the first /chat request doesn't pay
+    # the connection cost.
+    from agent.graph import init_checkpointer
+    await init_checkpointer()
+
+
+@app.on_event("shutdown")
+async def on_shutdown() -> None:
+    from agent.graph import close_checkpointer
+    await close_checkpointer()
 
 
 @app.get("/health")
@@ -334,3 +356,32 @@ def recent_incidents(
         .all()
     )
     return [IncidentOut.model_validate(i) for i in rows]
+
+
+# ---------------------------------------------------------------------------
+# Chat (SSE)
+# ---------------------------------------------------------------------------
+
+@app.post("/chat")
+async def chat(
+    body: ChatRequest,
+    current: Staff = Depends(get_current_staff),
+):
+    # Import lazily so the auth path doesn't pay for langchain import at startup.
+    from agent.graph import astream_chat
+
+    staff_id = current.id
+    staff_name = current.name
+
+    async def event_stream():
+        async for ev in astream_chat(
+            message=body.message,
+            thread_id=body.thread_id,
+            staff_name=staff_name,
+            staff_id=staff_id,
+        ):
+            ev_type = ev.get("type", "message")
+            payload = {k: v for k, v in ev.items() if k != "type"}
+            yield {"event": ev_type, "data": json.dumps(payload)}
+
+    return EventSourceResponse(event_stream())

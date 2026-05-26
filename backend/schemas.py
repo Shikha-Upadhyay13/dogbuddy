@@ -96,6 +96,11 @@ class ActivityUpdate(BaseModel):
     activity: str  # "walk" | "feed" | "meds"
 
 
+class ChatRequest(BaseModel):
+    message: str
+    thread_id: str
+
+
 # --- Dashboard / detail composites ---
 
 class DogDetailOut(DogOut):
