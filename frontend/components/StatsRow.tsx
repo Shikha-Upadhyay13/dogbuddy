@@ -14,70 +14,56 @@ export default function StatsRow({ data }: { data: BookingsToday }) {
   const inFacility = [...data.checking_in, ...data.in_care];
   const total =
     data.checking_in.length + data.in_care.length + data.checking_out.length;
-
   const overdueWalk = inFacility.filter((b) =>
     isStale(b.last_walked_at, 4),
   ).length;
-
   const overdueFed = inFacility.filter((b) => isStale(b.last_fed_at, 6)).length;
-
-  // We don't know in this snapshot which dogs have meds at all, so this is
-  // a rough "no meds recorded recently" signal across in-facility dogs.
-  const noMedsRecent = inFacility.filter((b) =>
+  const overdueMeds = inFacility.filter((b) =>
     isStale(b.last_meds_at, 12),
   ).length;
 
   const stats = [
     {
       Icon: DogIcon,
-      label: "Active bookings",
+      label: "Active",
       value: total,
-      tone: "accent",
+      tone: "default" as const,
     },
     {
       Icon: Footprints,
-      label: "Need walking",
+      label: "Walk overdue",
       value: overdueWalk,
-      tone: overdueWalk > 0 ? "warning" : "muted",
+      tone: overdueWalk > 0 ? "warn" : "default",
     },
     {
       Icon: AlertTriangle,
-      label: "Not fed >6h",
+      label: "Feed overdue",
       value: overdueFed,
-      tone: overdueFed > 0 ? "warning" : "muted",
+      tone: overdueFed > 0 ? "warn" : "default",
     },
     {
       Icon: Pill,
-      label: "No meds >12h",
-      value: noMedsRecent,
-      tone: noMedsRecent > 0 ? "warning" : "muted",
+      label: "Meds overdue",
+      value: overdueMeds,
+      tone: overdueMeds > 0 ? "warn" : "default",
     },
   ] as const;
 
   return (
-    <div className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-4">
+    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-4">
       {stats.map(({ Icon, label, value, tone }) => (
-        <div
-          key={label}
-          className="rounded-2xl border border-border bg-surface p-4"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs uppercase tracking-wide text-muted">
-              {label}
-            </span>
-            <span
-              className={`flex h-7 w-7 items-center justify-center rounded-lg ${
-                tone === "accent"
-                  ? "bg-accent/10 text-accent"
-                  : tone === "warning"
-                    ? "bg-warning/10 text-warning"
-                    : "bg-border/40 text-muted"
-              }`}
-            >
-              <Icon className="h-3.5 w-3.5" />
-            </span>
+        <div key={label} className="bg-bg px-4 py-3">
+          <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted">
+            <Icon
+              className={`h-3 w-3 ${tone === "warn" ? "text-warning" : ""}`}
+            />
+            {label}
           </div>
-          <div className="mt-2 text-2xl font-semibold tracking-tight">
+          <div
+            className={`mt-1 font-mono text-2xl font-semibold tabular-nums tracking-tight ${
+              tone === "warn" ? "text-warning" : "text-text"
+            }`}
+          >
             {value}
           </div>
         </div>

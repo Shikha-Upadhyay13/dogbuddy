@@ -3,9 +3,21 @@
 import { Footprints, UtensilsCrossed, Pill, ChevronRight } from "lucide-react";
 import { relTime } from "@/lib/time";
 import type { TodayBookingItem } from "@/lib/types";
-import StatusBadge from "./StatusBadge";
 
-// Deterministic gradient avatar so the same dog gets the same colour.
+const STATUS_DOT: Record<string, string> = {
+  scheduled: "bg-accent",
+  checked_in: "bg-warning",
+  in_care: "bg-success",
+  checked_out: "bg-muted",
+};
+const STATUS_LABEL: Record<string, string> = {
+  scheduled: "Scheduled",
+  checked_in: "Checked In",
+  in_care: "In Care",
+  checked_out: "Checked Out",
+};
+
+// Deterministic gradient avatar.
 const AVATAR_GRADIENTS = [
   "from-rose-400 to-rose-600",
   "from-amber-400 to-orange-600",
@@ -23,7 +35,6 @@ function avatarGradient(name: string): string {
   return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length];
 }
 
-// Highlight stale activity so the eye lands on it.
 function staleFor(iso: string | null, hours: number): boolean {
   if (!iso) return true;
   return Date.now() - new Date(iso).getTime() > hours * 60 * 60 * 1000;
@@ -38,7 +49,6 @@ export default function DogCard({
 }) {
   const { dog } = item;
   const grad = avatarGradient(dog.name);
-
   const walkStale = staleFor(item.last_walked_at, 4);
   const fedStale = staleFor(item.last_fed_at, 6);
   const medsStale = !!dog.medications && staleFor(item.last_meds_at, 8);
@@ -46,84 +56,91 @@ export default function DogCard({
   return (
     <button
       onClick={onOpen}
-      className="group relative flex w-full items-start gap-4 overflow-hidden rounded-2xl border border-border bg-surface p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-accent/60 hover:shadow-lg hover:shadow-accent/5"
+      className="group flex w-full items-center gap-4 border-b border-border bg-bg px-4 py-3 text-left transition hover:bg-surface/50"
     >
-      {/* Subtle gradient accent on hover */}
-      <div className="pointer-events-none absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-accent/40 to-transparent opacity-0 transition group-hover:opacity-100" />
-
       <div
-        className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br text-xl font-bold text-white shadow-md ${grad}`}
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-gradient-to-br text-sm font-semibold text-white ${grad}`}
       >
-        <span className="drop-shadow-sm">{dog.name[0]}</span>
-        {item.kennel_id && (
-          <span className="absolute -bottom-1 -right-1 rounded-md border border-border bg-surface px-1 py-0.5 text-[10px] font-medium text-muted">
-            {item.kennel_id}
+        {dog.name[0]}
+      </div>
+
+      {/* Name + status + breed */}
+      <div className="min-w-0 flex-1 md:flex-none md:basis-52">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-sm font-semibold text-text">
+            {dog.name}
           </span>
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted">
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[item.status] ?? "bg-muted"}`}
+            />
+            {STATUS_LABEL[item.status] ?? item.status}
+          </span>
+        </div>
+        <div className="mt-0.5 truncate text-xs text-muted">
+          {dog.breed} · {dog.age_years}y · {dog.weight_kg}kg
+        </div>
+      </div>
+
+      {/* Kennel + owner */}
+      <div className="hidden min-w-0 md:flex md:basis-56 md:flex-col">
+        <span className="font-mono text-xs text-text">
+          {item.kennel_id ?? "—"}
+        </span>
+        <span className="truncate text-xs text-muted">
+          {dog.owner_name} ·{" "}
+          <span className="font-mono">{dog.owner_phone}</span>
+        </span>
+      </div>
+
+      {/* Activity */}
+      <div className="ml-auto hidden items-center gap-4 md:flex">
+        <ActivityChip
+          Icon={Footprints}
+          when={item.last_walked_at}
+          stale={walkStale}
+          tip="Walk"
+        />
+        <ActivityChip
+          Icon={UtensilsCrossed}
+          when={item.last_fed_at}
+          stale={fedStale}
+          tip="Fed"
+        />
+        {dog.medications ? (
+          <ActivityChip
+            Icon={Pill}
+            when={item.last_meds_at}
+            stale={medsStale}
+            tip="Meds"
+          />
+        ) : (
+          <span className="w-12" />
         )}
       </div>
 
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0 flex items-center gap-2">
-            <span className="truncate text-base font-semibold text-text">
-              {dog.name}
-            </span>
-            <StatusBadge status={item.status} />
-          </div>
-          <ChevronRight className="h-4 w-4 text-muted transition group-hover:translate-x-0.5 group-hover:text-accent" />
-        </div>
-
-        <div className="mt-0.5 truncate text-sm text-muted">
-          {dog.breed} · {dog.age_years}y · {dog.weight_kg} kg
-        </div>
-        <div className="truncate text-xs text-muted">
-          {dog.owner_name} · {dog.owner_phone}
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-          <ActivityChip
-            Icon={Footprints}
-            label="walk"
-            when={item.last_walked_at}
-            stale={walkStale}
-          />
-          <ActivityChip
-            Icon={UtensilsCrossed}
-            label="fed"
-            when={item.last_fed_at}
-            stale={fedStale}
-          />
-          {dog.medications ? (
-            <ActivityChip
-              Icon={Pill}
-              label="meds"
-              when={item.last_meds_at}
-              stale={medsStale}
-            />
-          ) : null}
-        </div>
-      </div>
+      <ChevronRight className="h-4 w-4 shrink-0 text-muted transition group-hover:translate-x-0.5 group-hover:text-text" />
     </button>
   );
 }
 
 function ActivityChip({
   Icon,
-  label,
   when,
   stale,
+  tip,
 }: {
   Icon: typeof Footprints;
-  label: string;
   when: string | null;
   stale: boolean;
+  tip: string;
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 ${
-        stale ? "bg-warning/10 text-warning" : "text-muted"
+      className={`inline-flex w-20 items-center gap-1.5 font-mono text-[11px] tracking-tight ${
+        stale ? "text-warning" : "text-muted"
       }`}
-      title={`${label} — ${when ? new Date(when).toLocaleString() : "never"}`}
+      title={`${tip} · ${when ? new Date(when).toLocaleString() : "never"}`}
     >
       <Icon className="h-3.5 w-3.5" />
       {relTime(when)}

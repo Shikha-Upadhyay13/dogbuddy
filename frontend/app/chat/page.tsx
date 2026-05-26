@@ -3,12 +3,12 @@
 import AuthGate from "@/components/AuthGate";
 import BottomNav from "@/components/BottomNav";
 import ChatBox from "@/components/ChatBox";
-import TopNav from "@/components/TopNav";
+import Sidebar from "@/components/Sidebar";
 
 export default function ChatPage() {
   return (
     <AuthGate>
-      <TopNav />
+      <Sidebar />
       <ChatBox />
       <BottomNav />
     </AuthGate>

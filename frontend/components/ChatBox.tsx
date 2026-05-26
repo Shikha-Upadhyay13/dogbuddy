@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Send, Mic, MicOff, ArrowLeft, Loader2 } from "lucide-react";
+import { Send, Mic, MicOff, ArrowLeft, Loader2, Sparkles } from "lucide-react";
 import Link from "next/link";
 
 import { API_BASE } from "@/lib/api";
@@ -13,10 +13,10 @@ import ChatMessageView, {
 } from "./ChatMessage";
 
 const SUGGESTED_PROMPTS = [
-  "Who's in today?",
-  "What does Bruno eat?",
-  "Mark Rex as checked in",
-  "Symptoms of heatstroke in dogs?",
+  { text: "Who's in today?", hint: "read facility data" },
+  { text: "What does Bruno eat?", hint: "look up a dog" },
+  { text: "Mark Rex as checked in", hint: "update a status" },
+  { text: "Symptoms of heatstroke in dogs?", hint: "search the web" },
 ];
 
 // thread_id per PRD line 353: staff_{staff_id}_{YYYY_MM_DD}
@@ -36,14 +36,17 @@ type SpeechRecognitionLike = {
   continuous: boolean;
   interimResults: boolean;
   lang: string;
-  onresult: ((ev: any) => void) | null;
+  onresult: ((ev: unknown) => void) | null;
   onend: (() => void) | null;
-  onerror: ((ev: any) => void) | null;
+  onerror: ((ev: unknown) => void) | null;
 };
 
 function getSpeechCtor(): { new (): SpeechRecognitionLike } | null {
   if (typeof window === "undefined") return null;
-  const w = window as any;
+  const w = window as unknown as {
+    SpeechRecognition?: { new (): SpeechRecognitionLike };
+    webkitSpeechRecognition?: { new (): SpeechRecognitionLike };
+  };
   return w.SpeechRecognition || w.webkitSpeechRecognition || null;
 }
 
@@ -62,7 +65,6 @@ export default function ChatBox() {
     setSpeechAvailable(!!getSpeechCtor());
   }, []);
 
-  // Auto-scroll to bottom whenever messages change.
   useEffect(() => {
     const el = scrollerRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -149,7 +151,6 @@ export default function ChatBox() {
             const name = String(d.name ?? "tool");
             const result = String(d.result_summary ?? "");
             updateAsst(asstId, (m) => {
-              // Find the last in-flight call with this name; fall back to last entry.
               const tools = [...m.tools];
               for (let i = tools.length - 1; i >= 0; i--) {
                 if (tools[i].name === name && tools[i].result === undefined) {
@@ -179,7 +180,6 @@ export default function ChatBox() {
           error: msg,
         }));
       } finally {
-        // Ensure the bubble stops blinking even if stream ends without a "done" event.
         updateAsst(asstId, (m) => ({ ...m, done: true }));
         abortRef.current = null;
         setSending(false);
@@ -192,7 +192,6 @@ export default function ChatBox() {
     setMessages((prev) => prev.map((m) => (m.id === id ? fn(m) : m)));
   };
 
-  // Voice input
   const toggleMic = () => {
     if (!speechAvailable) return;
     if (recording) {
@@ -205,10 +204,16 @@ export default function ChatBox() {
     r.continuous = false;
     r.interimResults = true;
     r.lang = "en-US";
-    r.onresult = (e: any) => {
+    r.onresult = (e: unknown) => {
+      const ev = e as {
+        resultIndex: number;
+        results: { [k: number]: { [k: number]: { transcript: string } } } & {
+          length: number;
+        };
+      };
       let buf = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        buf += e.results[i][0].transcript;
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        buf += ev.results[i][0].transcript;
       }
       setInput((prev) => (prev ? prev + " " : "") + buf);
     };
@@ -231,10 +236,10 @@ export default function ChatBox() {
   };
 
   return (
-    <div className="mx-auto flex h-[100dvh] max-w-3xl flex-col md:h-[calc(100dvh-3.5rem)]">
-      {/* Mobile-only header (desktop has the TopNav above) */}
-      <header className="flex items-center justify-between border-b border-border px-4 py-3 md:hidden">
-        <h1 className="text-lg font-semibold">DogBuddy</h1>
+    <div className="flex h-[100dvh] flex-col md:ml-60 md:h-[100dvh]">
+      {/* Mobile-only header (desktop has Sidebar) */}
+      <header className="flex items-center justify-between border-b border-border bg-bg/85 px-4 py-3 backdrop-blur md:hidden">
+        <h1 className="text-sm font-semibold">DogBuddy</h1>
         <Link
           href="/dashboard"
           className="rounded p-1 text-muted transition hover:bg-border/40 hover:text-text"
@@ -244,73 +249,110 @@ export default function ChatBox() {
         </Link>
       </header>
 
+      {/* Desktop chat header */}
+      <header className="hidden items-center justify-between border-b border-border px-8 py-4 md:flex">
+        <div>
+          <h1 className="text-sm font-semibold tracking-tight text-text">
+            Ask DogBuddy
+          </h1>
+          <p className="font-mono text-[11px] text-muted">
+            thread · staff_{user?.id}_
+            {new Date().toISOString().slice(0, 10).replaceAll("-", "_")}
+          </p>
+        </div>
+        <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 font-mono text-[11px] text-muted">
+          <span className="h-1.5 w-1.5 rounded-full bg-success" /> live ·
+          gpt-4o-mini
+        </span>
+      </header>
+
+      {/* Messages */}
       <div
         ref={scrollerRef}
-        className="flex-1 space-y-4 overflow-y-auto px-4 py-4 pb-32"
+        className="flex-1 overflow-y-auto px-4 pb-40 pt-4 md:px-8 md:pb-36"
       >
         {messages.length === 0 ? (
-          <div className="mt-12 text-center text-muted">
-            <p className="mb-6 text-sm">
-              Ask DogBuddy anything. Tap a suggestion to start.
-            </p>
-            <div className="mx-auto grid max-w-md grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="mx-auto mt-12 max-w-2xl">
+            <div className="mb-6 flex items-center gap-2 text-accent">
+              <Sparkles className="h-4 w-4" />
+              <p className="text-sm font-medium">Suggestions</p>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {SUGGESTED_PROMPTS.map((p) => (
                 <button
-                  key={p}
-                  onClick={() => setInput(p)}
-                  className="rounded-xl border border-border bg-surface px-3 py-2 text-left text-sm text-text transition hover:border-accent/60"
+                  key={p.text}
+                  onClick={() => setInput(p.text)}
+                  className="group flex flex-col gap-1 rounded-lg border border-border bg-bg px-4 py-3 text-left text-sm text-text transition hover:border-accent/60 hover:bg-surface/60"
                 >
-                  {p}
+                  <span className="font-medium">{p.text}</span>
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-muted group-hover:text-accent">
+                    {p.hint}
+                  </span>
                 </button>
               ))}
             </div>
+            <p className="mt-10 text-center text-xs text-muted">
+              DogBuddy follows the medication-safety guardrail — it never
+              prescribes doses.
+            </p>
           </div>
         ) : (
-          messages.map((m) => <ChatMessageView key={m.id} msg={m} />)
+          <div className="mx-auto max-w-3xl space-y-5">
+            {messages.map((m) => (
+              <ChatMessageView key={m.id} msg={m} />
+            ))}
+          </div>
         )}
       </div>
 
+      {/* Composer */}
       <form
         onSubmit={onSubmit}
-        className="fixed inset-x-0 bottom-14 z-20 border-t border-border bg-bg/95 px-3 py-3 backdrop-blur md:bottom-0"
+        className="fixed inset-x-0 bottom-14 z-20 border-t border-border bg-bg/95 px-3 py-3 backdrop-blur md:bottom-0 md:left-60 md:px-8 md:py-5"
       >
         <div className="mx-auto flex max-w-3xl items-center gap-2">
           {speechAvailable && (
             <button
               type="button"
               onClick={toggleMic}
-              className={`shrink-0 rounded-full p-2 transition ${
+              className={`shrink-0 rounded-md border border-border p-2 transition ${
                 recording
-                  ? "bg-danger text-white"
-                  : "bg-surface text-muted hover:text-text"
+                  ? "border-danger/40 bg-danger/10 text-danger"
+                  : "bg-surface text-muted hover:border-accent/60 hover:text-text"
               }`}
               aria-label={recording ? "Stop recording" : "Start voice input"}
+              title={recording ? "Stop recording" : "Voice input"}
             >
               {recording ? (
-                <MicOff className="h-5 w-5" />
+                <MicOff className="h-4 w-4" />
               ) : (
-                <Mic className="h-5 w-5" />
+                <Mic className="h-4 w-4" />
               )}
             </button>
           )}
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            disabled={sending}
-            placeholder={recording ? "Listening..." : "Type a message"}
-            className="flex-1 rounded-full border border-border bg-surface px-4 py-2 text-text outline-none focus:border-accent disabled:opacity-50"
-          />
+          <div className="flex flex-1 items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 ring-accent/30 focus-within:border-accent focus-within:ring-2">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              disabled={sending}
+              placeholder={recording ? "Listening..." : "Message DogBuddy..."}
+              className="flex-1 bg-transparent text-sm text-text outline-none placeholder:text-muted disabled:opacity-50"
+            />
+            <kbd className="hidden rounded border border-border bg-bg/40 px-1.5 font-mono text-[10px] text-muted md:inline">
+              ⏎
+            </kbd>
+          </div>
           <button
             type="submit"
             disabled={sending || !input.trim()}
-            className="shrink-0 rounded-full bg-accent p-2 text-bg transition hover:opacity-90 disabled:opacity-50"
+            className="shrink-0 rounded-md bg-accent px-3 py-2 text-bg shadow shadow-accent/20 transition hover:opacity-90 disabled:opacity-50"
             aria-label="Send"
           >
             {sending ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <Send className="h-5 w-5" />
+              <Send className="h-4 w-4" />
             )}
           </button>
         </div>
