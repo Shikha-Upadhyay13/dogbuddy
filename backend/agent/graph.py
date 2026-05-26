@@ -31,7 +31,6 @@ _PROMPTS_DIR = _AGENT_DIR / "prompts"
 _SKILLS_DIR = _AGENT_DIR / "skills"
 
 _PROMPT_TEMPLATE = (_PROMPTS_DIR / "main_system.md").read_text(encoding="utf-8")
-_MED_SAFETY = (_SKILLS_DIR / "medication_safety.md").read_text(encoding="utf-8")
 _INCIDENT_LOGGING = (_SKILLS_DIR / "incident_logging.md").read_text(encoding="utf-8")
 
 _CHECKPOINT_DB_PATH = str(_AGENT_DIR.parent / "agent_memory.db")
@@ -64,7 +63,6 @@ def build_system_prompt(staff_name: str) -> str:
     return _PROMPT_TEMPLATE.format(
         today=date.today().isoformat(),
         staff_name=staff_name,
-        medication_safety_skill=_MED_SAFETY,
         incident_logging_skill=_INCIDENT_LOGGING,
     )
 
