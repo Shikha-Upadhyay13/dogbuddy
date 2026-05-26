@@ -7,7 +7,10 @@ import Link from "next/link";
 import { API_BASE } from "@/lib/api";
 import { getToken, getUser } from "@/lib/auth";
 import { streamSse } from "@/lib/sse";
-import ChatMessageView, { type ChatMessage, type ToolEvent } from "./ChatMessage";
+import ChatMessageView, {
+  type ChatMessage,
+  type ToolEvent,
+} from "./ChatMessage";
 
 const SUGGESTED_PROMPTS = [
   "Who's in today?",
@@ -114,7 +117,12 @@ export default function ChatBox() {
 
         if (!res.ok) {
           const errTxt = await res.text();
-          updateAsst(asstId, (m) => ({ ...m, thinking: false, done: true, error: `HTTP ${res.status}: ${errTxt.slice(0, 200)}` }));
+          updateAsst(asstId, (m) => ({
+            ...m,
+            thinking: false,
+            done: true,
+            error: `HTTP ${res.status}: ${errTxt.slice(0, 200)}`,
+          }));
           return;
         }
 
@@ -164,7 +172,12 @@ export default function ChatBox() {
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Stream error";
-        updateAsst(asstId, (m) => ({ ...m, thinking: false, done: true, error: msg }));
+        updateAsst(asstId, (m) => ({
+          ...m,
+          thinking: false,
+          done: true,
+          error: msg,
+        }));
       } finally {
         // Ensure the bubble stops blinking even if stream ends without a "done" event.
         updateAsst(asstId, (m) => ({ ...m, done: true }));
@@ -176,9 +189,7 @@ export default function ChatBox() {
   );
 
   const updateAsst = (id: string, fn: (m: ChatMessage) => ChatMessage) => {
-    setMessages((prev) =>
-      prev.map((m) => (m.id === id ? fn(m) : m)),
-    );
+    setMessages((prev) => prev.map((m) => (m.id === id ? fn(m) : m)));
   };
 
   // Voice input
@@ -232,7 +243,10 @@ export default function ChatBox() {
         </Link>
       </header>
 
-      <div ref={scrollerRef} className="flex-1 space-y-4 overflow-y-auto px-4 py-4 pb-32">
+      <div
+        ref={scrollerRef}
+        className="flex-1 space-y-4 overflow-y-auto px-4 py-4 pb-32"
+      >
         {messages.length === 0 ? (
           <div className="mt-12 text-center text-muted">
             <p className="mb-6 text-sm">
@@ -265,11 +279,17 @@ export default function ChatBox() {
               type="button"
               onClick={toggleMic}
               className={`shrink-0 rounded-full p-2 transition ${
-                recording ? "bg-danger text-white" : "bg-surface text-muted hover:text-text"
+                recording
+                  ? "bg-danger text-white"
+                  : "bg-surface text-muted hover:text-text"
               }`}
               aria-label={recording ? "Stop recording" : "Start voice input"}
             >
-              {recording ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+              {recording ? (
+                <MicOff className="h-5 w-5" />
+              ) : (
+                <Mic className="h-5 w-5" />
+              )}
             </button>
           )}
           <input
@@ -286,7 +306,11 @@ export default function ChatBox() {
             className="shrink-0 rounded-full bg-accent p-2 text-bg transition hover:opacity-90 disabled:opacity-50"
             aria-label="Send"
           >
-            {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+            {sending ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Send className="h-5 w-5" />
+            )}
           </button>
         </div>
       </form>

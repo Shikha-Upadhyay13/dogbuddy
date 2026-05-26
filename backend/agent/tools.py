@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 from datetime import date, datetime, timedelta
-from typing import Callable, Optional
+from typing import Optional
 
 import httpx
 from dotenv import load_dotenv
@@ -30,6 +30,7 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _fmt_dt(dt: Optional[datetime]) -> str:
     if dt is None:
@@ -65,6 +66,7 @@ PARALLEL_API_URL = "https://api.parallel.ai/v1beta/search"
 # Factory: build a fresh tool set bound to a staff_id
 # ---------------------------------------------------------------------------
 
+
 def make_tools(staff_id: int) -> list:
     """Return the 4 tools with `staff_id` captured by closure."""
 
@@ -88,9 +90,11 @@ def make_tools(staff_id: int) -> list:
         try:
             if query_type == "todays_bookings":
                 today = date.today()
-                rows = db.query(Booking).filter(
-                    Booking.start_date <= today, Booking.end_date >= today
-                ).all()
+                rows = (
+                    db.query(Booking)
+                    .filter(Booking.start_date <= today, Booking.end_date >= today)
+                    .all()
+                )
                 if not rows:
                     return "No dogs in facility today."
                 lines = [f"{len(rows)} dog(s) in facility today:"]
@@ -126,11 +130,15 @@ def make_tools(staff_id: int) -> list:
                 if task not in field_map:
                     return "Error: pending_tasks requires params={'task': 'walk'|'feed'|'meds'}"
                 today = date.today()
-                rows = db.query(Booking).filter(
-                    Booking.start_date <= today,
-                    Booking.end_date >= today,
-                    Booking.status.in_(("checked_in", "in_care")),
-                ).all()
+                rows = (
+                    db.query(Booking)
+                    .filter(
+                        Booking.start_date <= today,
+                        Booking.end_date >= today,
+                        Booking.status.in_(("checked_in", "in_care")),
+                    )
+                    .all()
+                )
                 threshold = timedelta(hours=4 if task == "walk" else 6)
                 now = datetime.now()
                 overdue = []
@@ -143,7 +151,12 @@ def make_tools(staff_id: int) -> list:
                 return f"Dogs needing {task}:\n" + "\n".join(overdue)
 
             if query_type == "recent_incidents":
-                rows = db.query(Incident).order_by(Incident.created_at.desc()).limit(20).all()
+                rows = (
+                    db.query(Incident)
+                    .order_by(Incident.created_at.desc())
+                    .limit(20)
+                    .all()
+                )
                 if not rows:
                     return "No incidents on record."
                 lines = [f"{len(rows)} recent incident(s):"]
@@ -157,7 +170,9 @@ def make_tools(staff_id: int) -> list:
 
             if query_type == "vaccination_status":
                 rows = db.scalars(
-                    select(Dog).where(Dog.vaccination_status.in_(("expiring_soon", "expired")))
+                    select(Dog).where(
+                        Dog.vaccination_status.in_(("expiring_soon", "expired"))
+                    )
                 ).all()
                 if not rows:
                     return "All dogs are up to date on vaccinations."
@@ -175,11 +190,17 @@ def make_tools(staff_id: int) -> list:
                 "recent_incidents, vaccination_status."
             )
         except Exception as e:
-            return f"Could not complete that - {e}. Try rephrasing or check the dashboard."
+            return (
+                f"Could not complete that - {e}. Try rephrasing or check the dashboard."
+            )
         finally:
             db.close()
 
-    _STATUS_ACTIONS = {"check_in": "checked_in", "in_care": "in_care", "check_out": "checked_out"}
+    _STATUS_ACTIONS = {
+        "check_in": "checked_in",
+        "in_care": "in_care",
+        "check_out": "checked_out",
+    }
     _ACTIVITY_ACTIONS = {
         "walked": "last_walked_at",
         "fed": "last_fed_at",
@@ -210,7 +231,11 @@ def make_tools(staff_id: int) -> list:
             today = date.today()
             booking = (
                 db.query(Booking)
-                .filter(Booking.dog_id == dog.id, Booking.start_date <= today, Booking.end_date >= today)
+                .filter(
+                    Booking.dog_id == dog.id,
+                    Booking.start_date <= today,
+                    Booking.end_date >= today,
+                )
                 .order_by(Booking.start_date.desc())
                 .first()
             )
@@ -234,7 +259,12 @@ def make_tools(staff_id: int) -> list:
                     action="update_status",
                     target_type="booking",
                     target_id=booking.id,
-                    details={"before": before, "after": new_status, "dog_id": dog.id, "via": "agent"},
+                    details={
+                        "before": before,
+                        "after": new_status,
+                        "dog_id": dog.id,
+                        "via": "agent",
+                    },
                 )
                 db.commit()
                 return f"Updated {dog.name}: status {before} -> {new_status}."
@@ -249,7 +279,12 @@ def make_tools(staff_id: int) -> list:
                     action="update_activity",
                     target_type="booking",
                     target_id=booking.id,
-                    details={"activity": action, "at": now.isoformat(), "dog_id": dog.id, "via": "agent"},
+                    details={
+                        "activity": action,
+                        "at": now.isoformat(),
+                        "dog_id": dog.id,
+                        "via": "agent",
+                    },
                 )
                 db.commit()
                 return f"Recorded for {dog.name}: {action} at {now.strftime('%H:%M')}."
@@ -268,7 +303,9 @@ def make_tools(staff_id: int) -> list:
     _SEVERITIES = {"mild", "moderate", "severe"}
 
     @tool
-    def log_incident(dog_name: str, incident_type: str, severity: str, description: str) -> str:
+    def log_incident(
+        dog_name: str, incident_type: str, severity: str, description: str
+    ) -> str:
         """
         Log an incident for a dog.
 

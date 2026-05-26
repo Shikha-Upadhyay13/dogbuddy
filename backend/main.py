@@ -67,12 +67,14 @@ async def on_startup() -> None:
     # Pre-open the async checkpointer so the first /chat request doesn't pay
     # the connection cost.
     from agent.graph import init_checkpointer
+
     await init_checkpointer()
 
 
 @app.on_event("shutdown")
 async def on_shutdown() -> None:
     from agent.graph import close_checkpointer
+
     await close_checkpointer()
 
 
@@ -85,7 +87,10 @@ def health() -> dict:
 # Auth
 # ---------------------------------------------------------------------------
 
-@app.post("/auth/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
+
+@app.post(
+    "/auth/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED
+)
 def signup(body: SignupRequest, db: Session = Depends(get_db)) -> AuthResponse:
     existing = db.query(Staff).filter(Staff.phone == body.phone).first()
     if existing:
@@ -122,6 +127,7 @@ def me(current: Staff = Depends(get_current_staff)) -> StaffOut:
 # ---------------------------------------------------------------------------
 # Dogs
 # ---------------------------------------------------------------------------
+
 
 @app.get("/dogs", response_model=list[DogOut])
 def list_dogs(
@@ -271,7 +277,9 @@ def update_booking_activity(
 ) -> BookingOut:
     field = _ACTIVITY_FIELD.get(body.activity)
     if field is None:
-        raise HTTPException(status_code=422, detail=f"Invalid activity: {body.activity}")
+        raise HTTPException(
+            status_code=422, detail=f"Invalid activity: {body.activity}"
+        )
 
     booking = db.get(Booking, booking_id)
     if booking is None:
@@ -286,7 +294,11 @@ def update_booking_activity(
         action="update_activity",
         target_type="booking",
         target_id=booking.id,
-        details={"activity": body.activity, "at": now.isoformat(), "dog_id": booking.dog_id},
+        details={
+            "activity": body.activity,
+            "at": now.isoformat(),
+            "dog_id": booking.dog_id,
+        },
     )
     db.commit()
     db.refresh(booking)
@@ -310,7 +322,9 @@ def create_incident(
     if body.type not in _VALID_INCIDENT_TYPES:
         raise HTTPException(status_code=422, detail=f"Invalid type: {body.type}")
     if body.severity not in _VALID_SEVERITIES:
-        raise HTTPException(status_code=422, detail=f"Invalid severity: {body.severity}")
+        raise HTTPException(
+            status_code=422, detail=f"Invalid severity: {body.severity}"
+        )
 
     dog = db.get(Dog, body.dog_id)
     if dog is None:
@@ -349,18 +363,14 @@ def recent_incidents(
     db: Session = Depends(get_db),
     _: Staff = Depends(get_current_staff),
 ) -> list[IncidentOut]:
-    rows = (
-        db.query(Incident)
-        .order_by(Incident.created_at.desc())
-        .limit(20)
-        .all()
-    )
+    rows = db.query(Incident).order_by(Incident.created_at.desc()).limit(20).all()
     return [IncidentOut.model_validate(i) for i in rows]
 
 
 # ---------------------------------------------------------------------------
 # Chat (SSE)
 # ---------------------------------------------------------------------------
+
 
 @app.post("/chat")
 async def chat(

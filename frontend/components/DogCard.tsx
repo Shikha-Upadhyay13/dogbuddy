@@ -7,13 +7,19 @@ import StatusBadge from "./StatusBadge";
 
 // Deterministic avatar color from the dog's name.
 const AVATAR_COLORS = [
-  "bg-rose-500",   "bg-amber-500", "bg-lime-500",
-  "bg-emerald-500","bg-cyan-500",  "bg-indigo-500",
-  "bg-fuchsia-500","bg-violet-500",
+  "bg-rose-500",
+  "bg-amber-500",
+  "bg-lime-500",
+  "bg-emerald-500",
+  "bg-cyan-500",
+  "bg-indigo-500",
+  "bg-fuchsia-500",
+  "bg-violet-500",
 ];
 function avatarColor(name: string): string {
   let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  for (let i = 0; i < name.length; i++)
+    hash = (hash * 31 + name.charCodeAt(i)) | 0;
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
@@ -31,7 +37,9 @@ export default function DogCard({
       onClick={onOpen}
       className="group flex w-full items-center gap-3 rounded-xl border border-border bg-surface p-4 text-left transition hover:border-accent/60"
     >
-      <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg font-semibold text-white ${avatarColor(dog.name)}`}>
+      <div
+        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg font-semibold text-white ${avatarColor(dog.name)}`}
+      >
         {dog.name[0]}
       </div>
 

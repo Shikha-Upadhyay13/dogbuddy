@@ -43,7 +43,9 @@ export default function LoginPage() {
       <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-8 shadow-xl">
         <div className="mb-6 flex items-center justify-center gap-2 text-accent">
           <DogIcon className="h-7 w-7" />
-          <span className="text-2xl font-semibold tracking-tight">DogBuddy</span>
+          <span className="text-2xl font-semibold tracking-tight">
+            DogBuddy
+          </span>
         </div>
 
         <form onSubmit={onSubmit} className="space-y-4">
@@ -92,7 +94,8 @@ export default function LoginPage() {
 
         {process.env.NODE_ENV !== "production" && (
           <p className="mt-6 text-center text-xs text-muted">
-            Use the seeded account: <span className="text-text">9999900001</span> /{" "}
+            Use the seeded account:{" "}
+            <span className="text-text">9999900001</span> /{" "}
             <span className="text-text">dogbuddy123</span>
           </p>
         )}

@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, RefreshCw, Loader2, AlertCircle } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  RefreshCw,
+  Loader2,
+  AlertCircle,
+} from "lucide-react";
 
 import AuthGate from "@/components/AuthGate";
 import BottomNav from "@/components/BottomNav";
@@ -15,8 +21,8 @@ import type { BookingsToday, TodayBookingItem } from "@/lib/types";
 type SectionKey = "checking_in" | "in_care" | "checking_out";
 
 const SECTION_TITLES: Record<SectionKey, string> = {
-  checking_in:  "Checking In Today",
-  in_care:      "In Care",
+  checking_in: "Checking In Today",
+  in_care: "In Care",
   checking_out: "Checking Out Today",
 };
 
@@ -43,7 +49,11 @@ export default function DashboardPage() {
       setData(d);
       setError(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : "Could not load today's bookings");
+      setError(
+        err instanceof ApiError
+          ? err.detail
+          : "Could not load today's bookings",
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -59,8 +69,7 @@ export default function DashboardPage() {
     router.replace("/login");
   };
 
-  const toggle = (k: SectionKey) =>
-    setOpen((o) => ({ ...o, [k]: !o[k] }));
+  const toggle = (k: SectionKey) => setOpen((o) => ({ ...o, [k]: !o[k] }));
 
   return (
     <AuthGate>
@@ -74,7 +83,9 @@ export default function DashboardPage() {
               className="rounded p-2 text-muted transition hover:bg-border/40 hover:text-text disabled:opacity-50"
               aria-label="Refresh"
             >
-              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+              />
             </button>
             <span>{user?.name ?? "Staff"}</span>
             <button

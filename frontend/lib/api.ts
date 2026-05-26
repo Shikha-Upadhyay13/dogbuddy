@@ -51,9 +51,9 @@ async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
       clearAuth();
     }
     const detail =
-      (parsed && typeof parsed === "object" && "detail" in parsed
+      parsed && typeof parsed === "object" && "detail" in parsed
         ? String((parsed as { detail: unknown }).detail)
-        : String(parsed || res.statusText));
+        : String(parsed || res.statusText);
     throw new ApiError(res.status, detail);
   }
 
@@ -61,9 +61,12 @@ async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
 }
 
 export const api = {
-  get:   <T>(path: string, opts: ApiOptions = {})           => request<T>(path, { method: "GET",   ...opts }),
-  post:  <T>(path: string, body: unknown, opts: ApiOptions = {}) => request<T>(path, { method: "POST",  body: JSON.stringify(body), ...opts }),
-  patch: <T>(path: string, body: unknown, opts: ApiOptions = {}) => request<T>(path, { method: "PATCH", body: JSON.stringify(body), ...opts }),
+  get: <T>(path: string, opts: ApiOptions = {}) =>
+    request<T>(path, { method: "GET", ...opts }),
+  post: <T>(path: string, body: unknown, opts: ApiOptions = {}) =>
+    request<T>(path, { method: "POST", body: JSON.stringify(body), ...opts }),
+  patch: <T>(path: string, body: unknown, opts: ApiOptions = {}) =>
+    request<T>(path, { method: "PATCH", body: JSON.stringify(body), ...opts }),
 };
 
 export { BASE as API_BASE };

@@ -7,8 +7,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-
 # --- Auth ---
+
 
 class SignupRequest(BaseModel):
     name: str = Field(min_length=1)
@@ -35,6 +35,7 @@ class AuthResponse(BaseModel):
 
 
 # --- Dogs / bookings / incidents (for Phase 2) ---
+
 
 class DogOut(BaseModel):
     id: int
@@ -102,6 +103,7 @@ class ChatRequest(BaseModel):
 
 
 # --- Dashboard / detail composites ---
+
 
 class DogDetailOut(DogOut):
     current_booking: Optional[BookingOut] = None

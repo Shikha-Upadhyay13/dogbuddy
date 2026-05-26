@@ -36,7 +36,9 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./dogbuddy.db")
 # SQLite needs check_same_thread=False so FastAPI can share connections across threads.
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {},
+    connect_args=(
+        {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+    ),
     echo=False,
 )
 

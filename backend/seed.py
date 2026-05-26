@@ -14,7 +14,6 @@ from datetime import date, datetime, timedelta
 import bcrypt
 
 from db import (
-    AuditLog,
     Base,
     Booking,
     Dog,
@@ -52,30 +51,126 @@ def seed_staff(session):
 DOGS_SPEC = [
     # (name, breed, age, weight, owner, owner_phone, status, notes,
     #  diet, medications, allergies, vaccination_status, vacc_expires_offset_days)
-    ("Rex",     "Golden Retriever", 4, 28.0, "Priya Sharma",  "9876543210", "scheduled",
-     "Friendly, loves tennis balls",
-     "Twice daily kibble, 1.5 cups",        None,             None,           "up_to_date",   180),
-    ("Bruno",   "Labrador",         7, 32.0, "Rohit Mehta",   "9876543211", "checked_in",
-     "Allergic to chicken",
-     "Lamb-based kibble, 2 cups twice/day", None,             "Chicken",      "up_to_date",   240),
-    ("Charlie", "Beagle",           3, 12.0, "Ananya Iyer",   "9876543212", "in_care",
-     "On daily thyroid medication",
-     "Prescription diet, 1 cup twice/day",  "Levothyroxine",  None,           "up_to_date",   120),
-    ("Bella",   "German Shepherd",  5, 30.0, "Karan Singh",   "9876543213", "in_care",
-     "Reactive to other dogs, walk alone",
-     "Large-breed kibble, 2.5 cups twice/day", None,          None,           "up_to_date",   300),
-    ("Max",     "Pug",              6,  9.0, "Tara Kapoor",   "9876543214", "in_care",
-     "Snores, breathing issues in heat",
-     "Brachycephalic diet, 0.75 cup twice/day", None,         None,           "up_to_date",    90),
-    ("Luna",    "Indie / Mixed",    2, 18.0, "Sneha Reddy",   "9876543215", "in_care",
-     "Recently adopted, shy",
-     "Standard kibble, 1.5 cups twice/day", None,             None,           "up_to_date",   200),
-    ("Coco",    "Shih Tzu",         8,  6.0, "Vikram Joshi",  "9876543216", "checked_out",
-     "Senior dog, gentle handling",
-     "Senior wet food, 0.5 cup three times/day", "Glucosamine", None,         "expiring_soon", 14),
-    ("Simba",   "Rottweiler",       4, 42.0, "Aisha Khan",    "9876543217", "checked_out",
-     "Strong puller on leash",
-     "Large-breed kibble, 3 cups twice/day", None,            None,           "expired",      -30),
+    (
+        "Rex",
+        "Golden Retriever",
+        4,
+        28.0,
+        "Priya Sharma",
+        "9876543210",
+        "scheduled",
+        "Friendly, loves tennis balls",
+        "Twice daily kibble, 1.5 cups",
+        None,
+        None,
+        "up_to_date",
+        180,
+    ),
+    (
+        "Bruno",
+        "Labrador",
+        7,
+        32.0,
+        "Rohit Mehta",
+        "9876543211",
+        "checked_in",
+        "Allergic to chicken",
+        "Lamb-based kibble, 2 cups twice/day",
+        None,
+        "Chicken",
+        "up_to_date",
+        240,
+    ),
+    (
+        "Charlie",
+        "Beagle",
+        3,
+        12.0,
+        "Ananya Iyer",
+        "9876543212",
+        "in_care",
+        "On daily thyroid medication",
+        "Prescription diet, 1 cup twice/day",
+        "Levothyroxine",
+        None,
+        "up_to_date",
+        120,
+    ),
+    (
+        "Bella",
+        "German Shepherd",
+        5,
+        30.0,
+        "Karan Singh",
+        "9876543213",
+        "in_care",
+        "Reactive to other dogs, walk alone",
+        "Large-breed kibble, 2.5 cups twice/day",
+        None,
+        None,
+        "up_to_date",
+        300,
+    ),
+    (
+        "Max",
+        "Pug",
+        6,
+        9.0,
+        "Tara Kapoor",
+        "9876543214",
+        "in_care",
+        "Snores, breathing issues in heat",
+        "Brachycephalic diet, 0.75 cup twice/day",
+        None,
+        None,
+        "up_to_date",
+        90,
+    ),
+    (
+        "Luna",
+        "Indie / Mixed",
+        2,
+        18.0,
+        "Sneha Reddy",
+        "9876543215",
+        "in_care",
+        "Recently adopted, shy",
+        "Standard kibble, 1.5 cups twice/day",
+        None,
+        None,
+        "up_to_date",
+        200,
+    ),
+    (
+        "Coco",
+        "Shih Tzu",
+        8,
+        6.0,
+        "Vikram Joshi",
+        "9876543216",
+        "checked_out",
+        "Senior dog, gentle handling",
+        "Senior wet food, 0.5 cup three times/day",
+        "Glucosamine",
+        None,
+        "expiring_soon",
+        14,
+    ),
+    (
+        "Simba",
+        "Rottweiler",
+        4,
+        42.0,
+        "Aisha Khan",
+        "9876543217",
+        "checked_out",
+        "Strong puller on leash",
+        "Large-breed kibble, 3 cups twice/day",
+        None,
+        None,
+        "expired",
+        -30,
+    ),
 ]
 
 
@@ -84,8 +179,19 @@ def seed_dogs_and_bookings(session):
     kennel_counter = 1
 
     for (
-        name, breed, age, weight, owner, owner_phone, status, notes,
-        diet, meds, allergies, vacc_status, vacc_offset,
+        name,
+        breed,
+        age,
+        weight,
+        owner,
+        owner_phone,
+        status,
+        notes,
+        diet,
+        meds,
+        allergies,
+        vacc_status,
+        vacc_offset,
     ) in DOGS_SPEC:
         dog = Dog(
             name=name,
@@ -121,24 +227,24 @@ def seed_dogs_and_bookings(session):
         if status == "in_care":
             if name == "Charlie":
                 last_walked = NOW - timedelta(minutes=30)
-                last_fed    = NOW - timedelta(hours=6)
-                last_meds   = NOW - timedelta(hours=2)
+                last_fed = NOW - timedelta(hours=6)
+                last_meds = NOW - timedelta(hours=2)
             elif name == "Bella":
                 last_walked = NOW - timedelta(hours=2)
-                last_fed    = NOW - timedelta(minutes=45)
-                last_meds   = None
+                last_fed = NOW - timedelta(minutes=45)
+                last_meds = None
             elif name == "Max":
                 last_walked = NOW - timedelta(hours=6)
-                last_fed    = NOW - timedelta(hours=1)
-                last_meds   = None
+                last_fed = NOW - timedelta(hours=1)
+                last_meds = None
             elif name == "Luna":
                 last_walked = NOW - timedelta(hours=1)
-                last_fed    = NOW - timedelta(minutes=30)
-                last_meds   = None
+                last_fed = NOW - timedelta(minutes=30)
+                last_meds = None
         elif status == "checked_in":
             last_walked = NOW - timedelta(hours=3)
-            last_fed    = NOW - timedelta(hours=2)
-            last_meds   = None
+            last_fed = NOW - timedelta(hours=2)
+            last_meds = None
 
         booking = Booking(
             dog_id=dog.id,
@@ -206,10 +312,13 @@ def main() -> None:
 
         # Verification summary
         from sqlalchemy import select, func
+
         n_dogs = session.scalar(select(func.count()).select_from(Dog))
         n_bookings = session.scalar(select(func.count()).select_from(Booking))
         n_incidents = session.scalar(select(func.count()).select_from(Incident))
-        print(f"OK Seed complete: 1 staff, {n_dogs} dogs, {n_bookings} bookings, {n_incidents} incidents")
+        print(
+            f"OK Seed complete: 1 staff, {n_dogs} dogs, {n_bookings} bookings, {n_incidents} incidents"
+        )
         print("   Login -> phone: 9999900001  password: dogbuddy123")
     finally:
         session.close()

@@ -51,7 +51,9 @@ export default function ChatMessageView({ msg }: { msg: ChatMessage }) {
         {msg.text && (
           <div className="whitespace-pre-wrap rounded-2xl rounded-bl-md border border-border bg-surface px-4 py-2 text-text">
             {msg.text}
-            {!msg.done && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-accent align-middle" />}
+            {!msg.done && (
+              <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-accent align-middle" />
+            )}
           </div>
         )}
 

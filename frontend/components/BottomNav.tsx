@@ -6,7 +6,7 @@ import { Home, MessageSquare } from "lucide-react";
 
 const TABS = [
   { href: "/dashboard", label: "Dashboard", Icon: Home },
-  { href: "/chat",      label: "Chat",      Icon: MessageSquare },
+  { href: "/chat", label: "Chat", Icon: MessageSquare },
 ] as const;
 
 export default function BottomNav() {

@@ -46,7 +46,11 @@ export async function* streamSse(
       }
     }
   } finally {
-    try { reader.releaseLock(); } catch { /* noop */ }
+    try {
+      reader.releaseLock();
+    } catch {
+      /* noop */
+    }
   }
 }
 
@@ -63,7 +67,7 @@ function parseFrame(frame: string): SseEvent | null {
   const dataLines: string[] = [];
   for (const line of frame.split(/\r?\n/)) {
     if (!line) continue;
-    if (line.startsWith(":")) continue;          // comment
+    if (line.startsWith(":")) continue; // comment
     const idx = line.indexOf(":");
     if (idx === -1) continue;
     const field = line.slice(0, idx);
@@ -74,6 +78,10 @@ function parseFrame(frame: string): SseEvent | null {
   if (dataLines.length === 0) return null;
   const raw = dataLines.join("\n");
   let data: unknown = raw;
-  try { data = JSON.parse(raw); } catch { /* keep raw string */ }
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    /* keep raw string */
+  }
   return { event, data };
 }

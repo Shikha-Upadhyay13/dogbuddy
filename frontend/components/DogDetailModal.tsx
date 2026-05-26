@@ -48,7 +48,9 @@ export default function DogDetailModal({ item, onClose, onAction }: Props) {
       setDetail(d);
       setError(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : "Could not load dog details");
+      setError(
+        err instanceof ApiError ? err.detail : "Could not load dog details",
+      );
     } finally {
       setLoading(false);
     }
@@ -70,7 +72,10 @@ export default function DogDetailModal({ item, onClose, onAction }: Props) {
 
   const currentStatus = detail?.current_booking?.status ?? item.status;
 
-  const doActivity = async (activity: "walk" | "feed" | "meds", label: string) => {
+  const doActivity = async (
+    activity: "walk" | "feed" | "meds",
+    label: string,
+  ) => {
     if (actionBusy) return;
     setActionBusy(label);
     try {
@@ -78,13 +83,18 @@ export default function DogDetailModal({ item, onClose, onAction }: Props) {
       await loadDetail();
       onAction();
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : `Failed to mark ${label}`);
+      setError(
+        err instanceof ApiError ? err.detail : `Failed to mark ${label}`,
+      );
     } finally {
       setActionBusy(null);
     }
   };
 
-  const doStatus = async (status: "checked_in" | "checked_out", label: string) => {
+  const doStatus = async (
+    status: "checked_in" | "checked_out",
+    label: string,
+  ) => {
     if (actionBusy) return;
     setActionBusy(label);
     try {
@@ -92,7 +102,11 @@ export default function DogDetailModal({ item, onClose, onAction }: Props) {
       await loadDetail();
       onAction();
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : `Failed to ${label.toLowerCase()}`);
+      setError(
+        err instanceof ApiError
+          ? err.detail
+          : `Failed to ${label.toLowerCase()}`,
+      );
     } finally {
       setActionBusy(null);
     }
@@ -134,15 +148,19 @@ export default function DogDetailModal({ item, onClose, onAction }: Props) {
         {detail && (
           <>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              <Row k="Breed"  v={detail.breed} />
-              <Row k="Age"    v={`${detail.age_years}y`} />
+              <Row k="Breed" v={detail.breed} />
+              <Row k="Age" v={`${detail.age_years}y`} />
               <Row k="Weight" v={`${detail.weight_kg} kg`} />
-              <Row k="Vacc"   v={fmtVacc(detail)} />
-              <Row k="Diet"        v={detail.diet     || "—"} span />
+              <Row k="Vacc" v={fmtVacc(detail)} />
+              <Row k="Diet" v={detail.diet || "—"} span />
               <Row k="Medications" v={detail.medications || "—"} span />
-              <Row k="Allergies"   v={detail.allergies   || "—"} span />
-              <Row k="Owner" v={`${detail.owner_name} · ${detail.owner_phone}`} span />
-              <Row k="Vet"   v={detail.vet_contact || "—"} span />
+              <Row k="Allergies" v={detail.allergies || "—"} span />
+              <Row
+                k="Owner"
+                v={`${detail.owner_name} · ${detail.owner_phone}`}
+                span
+              />
+              <Row k="Vet" v={detail.vet_contact || "—"} span />
               <Row k="Notes" v={detail.notes || "—"} span />
             </dl>
 
@@ -173,7 +191,9 @@ export default function DogDetailModal({ item, onClose, onAction }: Props) {
               />
             </div>
 
-            <h3 className="mb-2 mt-5 text-sm font-semibold text-muted">Status</h3>
+            <h3 className="mb-2 mt-5 text-sm font-semibold text-muted">
+              Status
+            </h3>
             <div className="flex gap-2">
               {currentStatus === "scheduled" && (
                 <StatusBtn
@@ -183,7 +203,8 @@ export default function DogDetailModal({ item, onClose, onAction }: Props) {
                   onClick={() => doStatus("checked_in", "Check In")}
                 />
               )}
-              {(currentStatus === "checked_in" || currentStatus === "in_care") && (
+              {(currentStatus === "checked_in" ||
+                currentStatus === "in_care") && (
                 <StatusBtn
                   Icon={LogOut}
                   label="Check Out"
@@ -199,7 +220,9 @@ export default function DogDetailModal({ item, onClose, onAction }: Props) {
             <hr className="my-5 border-border" />
 
             <h3 className="mb-2 text-sm font-semibold text-muted">
-              Recent incidents {detail.recent_incidents.length > 0 && `(${detail.recent_incidents.length})`}
+              Recent incidents{" "}
+              {detail.recent_incidents.length > 0 &&
+                `(${detail.recent_incidents.length})`}
             </h3>
             {detail.recent_incidents.length === 0 ? (
               <p className="text-sm text-muted">No incidents on record.</p>
@@ -213,7 +236,9 @@ export default function DogDetailModal({ item, onClose, onAction }: Props) {
                     <div className="flex items-center justify-between text-xs text-muted">
                       <span>
                         {i.type} ·{" "}
-                        <span className={SEVERITY_STYLE[i.severity] ?? "text-muted"}>
+                        <span
+                          className={SEVERITY_STYLE[i.severity] ?? "text-muted"}
+                        >
                           {i.severity}
                         </span>
                       </span>
@@ -242,13 +267,19 @@ function Row({ k, v, span = false }: { k: string; v: string; span?: boolean }) {
 
 function fmtVacc(d: DogDetail): string {
   if (d.vaccination_status === "up_to_date") return "Up to date";
-  if (d.vaccination_status === "expiring_soon") return `Expiring soon${d.vaccination_expires ? ` (${d.vaccination_expires})` : ""}`;
-  if (d.vaccination_status === "expired") return `EXPIRED${d.vaccination_expires ? ` (${d.vaccination_expires})` : ""}`;
+  if (d.vaccination_status === "expiring_soon")
+    return `Expiring soon${d.vaccination_expires ? ` (${d.vaccination_expires})` : ""}`;
+  if (d.vaccination_status === "expired")
+    return `EXPIRED${d.vaccination_expires ? ` (${d.vaccination_expires})` : ""}`;
   return d.vaccination_status;
 }
 
 function ActionBtn({
-  Icon, label, sub, busy, onClick,
+  Icon,
+  label,
+  sub,
+  busy,
+  onClick,
 }: {
   Icon: typeof Footprints;
   label: string;
@@ -262,7 +293,11 @@ function ActionBtn({
       disabled={busy}
       className="flex flex-col items-center justify-center gap-1 rounded-lg border border-border bg-bg/40 px-2 py-3 text-sm transition hover:border-accent disabled:opacity-50"
     >
-      {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Icon className="h-5 w-5 text-accent" />}
+      {busy ? (
+        <Loader2 className="h-5 w-5 animate-spin" />
+      ) : (
+        <Icon className="h-5 w-5 text-accent" />
+      )}
       <span className="font-medium text-text">Mark {label}</span>
       <span className="text-xs text-muted">{sub}</span>
     </button>
@@ -270,7 +305,10 @@ function ActionBtn({
 }
 
 function StatusBtn({
-  Icon, label, busy, onClick,
+  Icon,
+  label,
+  busy,
+  onClick,
 }: {
   Icon: typeof LogIn;
   label: string;
@@ -283,7 +321,11 @@ function StatusBtn({
       disabled={busy}
       className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-bg transition hover:opacity-90 disabled:opacity-50"
     >
-      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
+      {busy ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <Icon className="h-4 w-4" />
+      )}
       {label}
     </button>
   );
