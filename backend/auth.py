@@ -61,21 +61,46 @@ def decode_token(token: str) -> int:
         )
 
 
-def get_current_staff(
+def get_current_user(
     token: str | None = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> Staff:
+    """Resolve the JWT into a Staff row (which now represents any user --
+    staff OR owner -- distinguished by the `role` column)."""
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    staff_id = decode_token(token)
-    staff = db.get(Staff, staff_id)
-    if staff is None:
+    user_id = decode_token(token)
+    user = db.get(Staff, user_id)
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Staff not found",
+            detail="User not found",
         )
-    return staff
+    return user
+
+
+def require_role(*allowed_roles: str):
+    """FastAPI dependency factory: only lets users with one of the listed
+    roles through. Usage: `current = Depends(require_role('staff'))`."""
+
+    def _dep(current: Staff = Depends(get_current_user)) -> Staff:
+        if current.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"This action requires role: {' or '.join(allowed_roles)}",
+            )
+        return current
+
+    return _dep
+
+
+# Backwards-compat alias: every endpoint that used get_current_staff still
+# works, but now also implicitly enforces the staff role.
+def get_current_staff(
+    current: Staff = Depends(require_role("staff")),
+) -> Staff:
+    return current
