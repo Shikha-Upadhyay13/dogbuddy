@@ -1,24 +1,44 @@
-"""FastAPI application entrypoint. Phase 1: auth endpoints only.
+"""FastAPI application entrypoint.
 
-Domain endpoints (dogs, bookings, incidents, chat) are added in later phases.
+Phase 1: /auth/*
+Phase 2: /dogs, /bookings/today, /bookings/{id}/status, /bookings/{id}/activity,
+         /incidents, /incidents/recent
 """
 
 from __future__ import annotations
 
+from datetime import date, datetime
+
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from audit import write_audit
 from auth import (
     create_access_token,
     get_current_staff,
     hash_password,
     verify_password,
 )
-from db import Staff, get_db, init_db
-from schemas import AuthResponse, LoginRequest, SignupRequest, StaffOut
+from db import Booking, Dog, Incident, Staff, get_db, init_db
+from schemas import (
+    ActivityUpdate,
+    AuthResponse,
+    BookingOut,
+    BookingsTodayOut,
+    DogDetailOut,
+    DogOut,
+    IncidentIn,
+    IncidentOut,
+    LoginRequest,
+    SignupRequest,
+    StaffOut,
+    StatusUpdate,
+    TodayBookingItem,
+)
 
-app = FastAPI(title="DogBuddy API", version="0.1.0")
+app = FastAPI(title="DogBuddy API", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -39,7 +59,9 @@ def health() -> dict:
     return {"status": "ok"}
 
 
-# --- Auth ---
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
 
 @app.post("/auth/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 def signup(body: SignupRequest, db: Session = Depends(get_db)) -> AuthResponse:
@@ -73,3 +95,242 @@ def login(body: LoginRequest, db: Session = Depends(get_db)) -> AuthResponse:
 @app.get("/auth/me", response_model=StaffOut)
 def me(current: Staff = Depends(get_current_staff)) -> StaffOut:
     return StaffOut.model_validate(current)
+
+
+# ---------------------------------------------------------------------------
+# Dogs
+# ---------------------------------------------------------------------------
+
+@app.get("/dogs", response_model=list[DogOut])
+def list_dogs(
+    db: Session = Depends(get_db),
+    _: Staff = Depends(get_current_staff),
+) -> list[DogOut]:
+    rows = db.scalars(select(Dog).order_by(Dog.name)).all()
+    return [DogOut.model_validate(d) for d in rows]
+
+
+@app.get("/dogs/{dog_id}", response_model=DogDetailOut)
+def get_dog(
+    dog_id: int,
+    db: Session = Depends(get_db),
+    _: Staff = Depends(get_current_staff),
+) -> DogDetailOut:
+    dog = db.get(Dog, dog_id)
+    if dog is None:
+        raise HTTPException(status_code=404, detail="Dog not found")
+
+    # Current booking = most recent booking by start_date (ties broken by id).
+    current = (
+        db.query(Booking)
+        .filter(Booking.dog_id == dog_id)
+        .order_by(Booking.start_date.desc(), Booking.id.desc())
+        .first()
+    )
+
+    recent = (
+        db.query(Incident)
+        .filter(Incident.dog_id == dog_id)
+        .order_by(Incident.created_at.desc())
+        .limit(5)
+        .all()
+    )
+
+    return DogDetailOut(
+        **DogOut.model_validate(dog).model_dump(),
+        current_booking=BookingOut.model_validate(current) if current else None,
+        recent_incidents=[IncidentOut.model_validate(i) for i in recent],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Bookings
+# ---------------------------------------------------------------------------
+
+# Bucket mapping for the dashboard. The seed data is built to fall into
+# exactly these three groups when seed.py is run on the same day.
+_CHECKING_IN_STATUSES = {"scheduled"}
+_IN_CARE_STATUSES = {"checked_in", "in_care"}
+_CHECKING_OUT_STATUSES = {"checked_out"}
+
+
+def _to_today_item(b: Booking) -> TodayBookingItem:
+    return TodayBookingItem(
+        booking_id=b.id,
+        dog=DogOut.model_validate(b.dog),
+        kennel_id=b.kennel_id,
+        status=b.status,
+        last_walked_at=b.last_walked_at,
+        last_fed_at=b.last_fed_at,
+        last_meds_at=b.last_meds_at,
+    )
+
+
+@app.get("/bookings/today", response_model=BookingsTodayOut)
+def bookings_today(
+    db: Session = Depends(get_db),
+    _: Staff = Depends(get_current_staff),
+) -> BookingsTodayOut:
+    today = date.today()
+    # An "active today" booking has today within [start_date, end_date]
+    # OR is in the checked_out bucket and ended today.
+    rows = (
+        db.query(Booking)
+        .filter(Booking.start_date <= today, Booking.end_date >= today)
+        .all()
+    )
+
+    checking_in: list[TodayBookingItem] = []
+    in_care: list[TodayBookingItem] = []
+    checking_out: list[TodayBookingItem] = []
+
+    for b in rows:
+        item = _to_today_item(b)
+        if b.status in _CHECKING_IN_STATUSES:
+            checking_in.append(item)
+        elif b.status in _IN_CARE_STATUSES:
+            in_care.append(item)
+        elif b.status in _CHECKING_OUT_STATUSES:
+            checking_out.append(item)
+
+    return BookingsTodayOut(
+        checking_in=checking_in,
+        in_care=in_care,
+        checking_out=checking_out,
+    )
+
+
+_ALLOWED_STATUSES = {"checked_in", "in_care", "checked_out"}
+
+
+@app.patch("/bookings/{booking_id}/status", response_model=BookingOut)
+def update_booking_status(
+    booking_id: int,
+    body: StatusUpdate,
+    db: Session = Depends(get_db),
+    current: Staff = Depends(get_current_staff),
+) -> BookingOut:
+    if body.status not in _ALLOWED_STATUSES:
+        raise HTTPException(status_code=422, detail=f"Invalid status: {body.status}")
+
+    booking = db.get(Booking, booking_id)
+    if booking is None:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    before = booking.status
+    booking.status = body.status
+
+    write_audit(
+        db,
+        staff_id=current.id,
+        action="update_status",
+        target_type="booking",
+        target_id=booking.id,
+        details={"before": before, "after": body.status, "dog_id": booking.dog_id},
+    )
+    db.commit()
+    db.refresh(booking)
+    return BookingOut.model_validate(booking)
+
+
+_ACTIVITY_FIELD = {
+    "walk": "last_walked_at",
+    "feed": "last_fed_at",
+    "meds": "last_meds_at",
+}
+
+
+@app.patch("/bookings/{booking_id}/activity", response_model=BookingOut)
+def update_booking_activity(
+    booking_id: int,
+    body: ActivityUpdate,
+    db: Session = Depends(get_db),
+    current: Staff = Depends(get_current_staff),
+) -> BookingOut:
+    field = _ACTIVITY_FIELD.get(body.activity)
+    if field is None:
+        raise HTTPException(status_code=422, detail=f"Invalid activity: {body.activity}")
+
+    booking = db.get(Booking, booking_id)
+    if booking is None:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    now = datetime.now()
+    setattr(booking, field, now)
+
+    write_audit(
+        db,
+        staff_id=current.id,
+        action="update_activity",
+        target_type="booking",
+        target_id=booking.id,
+        details={"activity": body.activity, "at": now.isoformat(), "dog_id": booking.dog_id},
+    )
+    db.commit()
+    db.refresh(booking)
+    return BookingOut.model_validate(booking)
+
+
+# ---------------------------------------------------------------------------
+# Incidents
+# ---------------------------------------------------------------------------
+
+_VALID_INCIDENT_TYPES = {"health", "behavior", "feeding", "other"}
+_VALID_SEVERITIES = {"mild", "moderate", "severe"}
+
+
+@app.post("/incidents", response_model=IncidentOut, status_code=status.HTTP_201_CREATED)
+def create_incident(
+    body: IncidentIn,
+    db: Session = Depends(get_db),
+    current: Staff = Depends(get_current_staff),
+) -> IncidentOut:
+    if body.type not in _VALID_INCIDENT_TYPES:
+        raise HTTPException(status_code=422, detail=f"Invalid type: {body.type}")
+    if body.severity not in _VALID_SEVERITIES:
+        raise HTTPException(status_code=422, detail=f"Invalid severity: {body.severity}")
+
+    dog = db.get(Dog, body.dog_id)
+    if dog is None:
+        raise HTTPException(status_code=404, detail="Dog not found")
+
+    incident = Incident(
+        dog_id=body.dog_id,
+        staff_id=current.id,
+        type=body.type,
+        severity=body.severity,
+        description=body.description,
+    )
+    db.add(incident)
+    db.flush()
+
+    write_audit(
+        db,
+        staff_id=current.id,
+        action="log_incident",
+        target_type="incident",
+        target_id=incident.id,
+        details={
+            "dog_id": body.dog_id,
+            "type": body.type,
+            "severity": body.severity,
+            "description": body.description,
+        },
+    )
+    db.commit()
+    db.refresh(incident)
+    return IncidentOut.model_validate(incident)
+
+
+@app.get("/incidents/recent", response_model=list[IncidentOut])
+def recent_incidents(
+    db: Session = Depends(get_db),
+    _: Staff = Depends(get_current_staff),
+) -> list[IncidentOut]:
+    rows = (
+        db.query(Incident)
+        .order_by(Incident.created_at.desc())
+        .limit(20)
+        .all()
+    )
+    return [IncidentOut.model_validate(i) for i in rows]

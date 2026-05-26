@@ -94,3 +94,26 @@ class StatusUpdate(BaseModel):
 
 class ActivityUpdate(BaseModel):
     activity: str  # "walk" | "feed" | "meds"
+
+
+# --- Dashboard / detail composites ---
+
+class DogDetailOut(DogOut):
+    current_booking: Optional[BookingOut] = None
+    recent_incidents: list[IncidentOut] = []
+
+
+class TodayBookingItem(BaseModel):
+    booking_id: int
+    dog: DogOut
+    kennel_id: Optional[str] = None
+    status: str
+    last_walked_at: Optional[datetime] = None
+    last_fed_at: Optional[datetime] = None
+    last_meds_at: Optional[datetime] = None
+
+
+class BookingsTodayOut(BaseModel):
+    checking_in: list[TodayBookingItem]
+    in_care: list[TodayBookingItem]
+    checking_out: list[TodayBookingItem]

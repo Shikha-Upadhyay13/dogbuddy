@@ -99,7 +99,7 @@ def seed_dogs_and_bookings(session):
             vaccination_expires=TODAY + timedelta(days=vacc_offset),
             owner_name=owner,
             owner_phone=owner_phone,
-            vet_contact="Dr. Mehta · 9811122233",
+            vet_contact="Dr. Mehta - 9811122233",
             notes=notes,
         )
         session.add(dog)
