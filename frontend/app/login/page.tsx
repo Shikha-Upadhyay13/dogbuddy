@@ -2,41 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Dog as DogIcon,
-  Loader2,
-  PawPrint,
-  Stethoscope,
-  MessageSquareText,
-  ShieldCheck,
-} from "lucide-react";
+import { Dog as DogIcon, Loader2, ArrowRight } from "lucide-react";
 
 import { api, ApiError } from "@/lib/api";
 import { saveAuth } from "@/lib/auth";
 import type { AuthResponse } from "@/lib/types";
 
-const FEATURES = [
-  {
-    Icon: PawPrint,
-    title: "Today's dogs at a glance",
-    body: "Every dog in the facility, grouped by check-in, in-care, and check-out.",
-  },
-  {
-    Icon: MessageSquareText,
-    title: "AI copilot in chat",
-    body: "Update statuses, log incidents, and look things up by typing or speaking.",
-  },
-  {
-    Icon: Stethoscope,
-    title: "Live health research",
-    body: "Get cited answers on breed health, behavior, and care from the live web.",
-  },
-  {
-    Icon: ShieldCheck,
-    title: "Safety guardrails",
-    body: "DogBuddy never gives medication doses — it always defers to your vet.",
-  },
-];
+// Stable Unsplash hot-link (no API key required). A warm portrait of a
+// golden retriever — sets the emotional tone for a dog-boarding product.
+const HERO_IMG =
+  "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=1400&q=85";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -69,56 +44,63 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="grid min-h-screen grid-cols-1 lg:grid-cols-2">
-      {/* Left: brand panel */}
-      <aside className="relative hidden overflow-hidden lg:flex lg:flex-col lg:justify-between bg-gradient-to-br from-accent/20 via-bg to-bg p-12">
-        {/* Soft accent blob */}
-        <div className="pointer-events-none absolute -top-32 -left-32 h-96 w-96 rounded-full bg-accent/30 blur-3xl" />
-        <div className="pointer-events-none absolute bottom-0 right-0 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
+    <main className="grid min-h-screen grid-cols-1 lg:grid-cols-[1.1fr_1fr]">
+      {/* Left: hero image with overlay */}
+      <aside className="relative hidden overflow-hidden lg:block">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={HERO_IMG}
+          alt="A dog looking up — calm, attentive."
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        {/* Top-to-bottom darkening + tinted overlay for legibility */}
+        <div className="absolute inset-0 bg-gradient-to-b from-bg/40 via-bg/55 to-bg/95" />
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent to-bg/30" />
 
-        <header className="relative flex items-center gap-3 text-accent">
-          <DogIcon className="h-9 w-9" />
-          <span className="text-2xl font-semibold tracking-tight">
-            DogBuddy
-          </span>
-        </header>
+        {/* Content */}
+        <div className="relative flex h-full flex-col justify-between p-12 xl:p-16">
+          <header className="flex items-center gap-3 text-text">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-text/15 bg-bg/40 text-accent backdrop-blur">
+              <DogIcon className="h-5 w-5" />
+            </span>
+            <span className="text-xl font-semibold tracking-tight">
+              DogBuddy
+            </span>
+          </header>
 
-        <div className="relative max-w-md space-y-8">
-          <div>
-            <h1 className="text-4xl font-semibold leading-tight tracking-tight text-text">
-              The senior colleague every dog boarding facility needs.
+          <div className="max-w-xl space-y-6">
+            <h1 className="text-5xl font-semibold leading-[1.05] tracking-tight text-text xl:text-6xl">
+              Every dog.
+              <br />
+              Every detail.
+              <br />
+              <span className="text-accent">Every shift.</span>
             </h1>
-            <p className="mt-4 text-base text-muted">
-              Track every dog, log every incident, and get instant answers — by
-              chat or by voice. Built for staff on the kennel floor.
+            <p className="text-lg leading-relaxed text-text/80">
+              DogBuddy is the senior colleague on every shift — tracking every
+              dog, logging every incident, and answering questions about care,
+              breeds, and behavior in seconds.
             </p>
+            <div className="flex items-center gap-2 text-sm font-medium text-accent">
+              Built for the kennel floor, not the office desk.
+              <ArrowRight className="h-4 w-4" />
+            </div>
           </div>
 
-          <ul className="space-y-4">
-            {FEATURES.map(({ Icon, title, body }) => (
-              <li key={title} className="flex gap-3">
-                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-accent">
-                  <Icon className="h-4 w-4" />
-                </span>
-                <div>
-                  <p className="font-medium text-text">{title}</p>
-                  <p className="text-sm text-muted">{body}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <footer className="text-xs text-text/50">
+            DogBuddy · Prototype v1 · {new Date().getFullYear()}
+          </footer>
         </div>
-
-        <footer className="relative text-xs text-muted">
-          Prototype · v1 · {new Date().getFullYear()}
-        </footer>
       </aside>
 
       {/* Right: form */}
-      <section className="flex items-center justify-center px-6 py-10 sm:px-12">
-        <div className="w-full max-w-sm">
-          {/* Mobile-only logo (hidden on lg where the left panel shows it) */}
-          <div className="mb-8 flex items-center justify-center gap-2 text-accent lg:hidden">
+      <section className="relative flex items-center justify-center px-6 py-10 sm:px-12">
+        {/* Subtle accent behind the form on mobile too */}
+        <div className="pointer-events-none absolute -top-24 right-0 h-72 w-72 rounded-full bg-accent/10 blur-3xl lg:hidden" />
+
+        <div className="relative w-full max-w-md">
+          {/* Mobile brand */}
+          <div className="mb-10 flex items-center justify-center gap-2 text-accent lg:hidden">
             <DogIcon className="h-7 w-7" />
             <span className="text-2xl font-semibold tracking-tight">
               DogBuddy
@@ -126,17 +108,18 @@ export default function LoginPage() {
           </div>
 
           <div className="mb-8">
-            <h2 className="text-2xl font-semibold tracking-tight">
-              Welcome back
-            </h2>
-            <p className="mt-1 text-sm text-muted">
-              Sign in with your staff credentials to continue.
+            <h2 className="text-3xl font-semibold tracking-tight">Sign in</h2>
+            <p className="mt-2 text-sm text-muted">
+              Welcome back. Continue managing today&apos;s shift.
             </p>
           </div>
 
-          <form onSubmit={onSubmit} className="space-y-4">
+          <form onSubmit={onSubmit} className="space-y-5">
             <div>
-              <label htmlFor="phone" className="mb-1 block text-sm text-muted">
+              <label
+                htmlFor="phone"
+                className="mb-1.5 block text-sm font-medium text-text/90"
+              >
                 Phone
               </label>
               <input
@@ -145,7 +128,7 @@ export default function LoginPage() {
                 autoComplete="username"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-text outline-none transition focus:border-accent"
+                className="w-full rounded-lg border border-border bg-surface px-3.5 py-3 text-text outline-none ring-accent/30 transition focus:border-accent focus:ring-2"
                 placeholder="9999900001"
                 required
                 disabled={busy}
@@ -155,7 +138,7 @@ export default function LoginPage() {
             <div>
               <label
                 htmlFor="password"
-                className="mb-1 block text-sm text-muted"
+                className="mb-1.5 block text-sm font-medium text-text/90"
               >
                 Password
               </label>
@@ -165,14 +148,14 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-text outline-none transition focus:border-accent"
+                className="w-full rounded-lg border border-border bg-surface px-3.5 py-3 text-text outline-none ring-accent/30 transition focus:border-accent focus:ring-2"
                 required
                 disabled={busy}
               />
             </div>
 
             {error && (
-              <div className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
+              <div className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2.5 text-sm text-danger">
                 {error}
               </div>
             )}
@@ -180,18 +163,29 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={busy}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 font-medium text-bg transition hover:opacity-90 disabled:opacity-50"
+              className="group flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-3 font-semibold text-bg shadow-lg shadow-accent/20 transition hover:opacity-90 disabled:opacity-50"
             >
               {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-              {busy ? "Logging in..." : "Log in"}
+              {busy ? "Signing in..." : "Sign in"}
+              {!busy && (
+                <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
+              )}
             </button>
           </form>
 
           {process.env.NODE_ENV !== "production" && (
-            <div className="mt-8 rounded-lg border border-border bg-surface/60 p-3 text-xs text-muted">
-              <p className="mb-1 font-medium text-text">Dev login</p>
-              Phone <span className="font-mono text-text">9999900001</span> ·
-              Password <span className="font-mono text-text">dogbuddy123</span>
+            <div className="mt-10 rounded-xl border border-border bg-surface/60 p-4 text-xs text-muted">
+              <p className="mb-2 font-semibold uppercase tracking-wider text-text/80">
+                Dev login
+              </p>
+              <div className="flex flex-col gap-1 font-mono text-text">
+                <span>
+                  <span className="text-muted">phone </span>9999900001
+                </span>
+                <span>
+                  <span className="text-muted">pass </span>dogbuddy123
+                </span>
+              </div>
             </div>
           )}
         </div>

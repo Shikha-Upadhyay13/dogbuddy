@@ -14,7 +14,9 @@ import BottomNav from "@/components/BottomNav";
 import TopNav from "@/components/TopNav";
 import DogCard from "@/components/DogCard";
 import DogDetailModal from "@/components/DogDetailModal";
+import StatsRow from "@/components/StatsRow";
 import { api, ApiError } from "@/lib/api";
+import { getUser } from "@/lib/auth";
 import type { BookingsToday, TodayBookingItem } from "@/lib/types";
 
 type SectionKey = "checking_in" | "in_care" | "checking_out";
@@ -61,28 +63,32 @@ export default function DashboardPage() {
   }, [load]);
 
   const toggle = (k: SectionKey) => setOpen((o) => ({ ...o, [k]: !o[k] }));
+  const user = getUser();
+  const greeting = (() => {
+    const h = new Date().getHours();
+    if (h < 12) return "Good morning";
+    if (h < 17) return "Good afternoon";
+    return "Good evening";
+  })();
 
   return (
     <AuthGate>
       <TopNav />
-      <main className="mx-auto max-w-6xl px-4 pb-24 pt-6 md:px-8 md:pt-8">
-        <header className="mb-8 flex items-center justify-between">
+      <main className="mx-auto max-w-6xl px-4 pb-24 pt-6 md:px-8 md:pt-10">
+        <header className="mb-8 flex items-end justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight">Today</h1>
-            <p className="mt-1 text-sm text-muted">
-              {data
-                ? `${
-                    data.checking_in.length +
-                    data.in_care.length +
-                    data.checking_out.length
-                  } active bookings`
-                : "Loading bookings..."}
+            <p className="text-sm text-muted">
+              {greeting}
+              {user?.name ? `, ${user.name}` : ""}.
             </p>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight md:text-4xl">
+              Today&apos;s shift
+            </h1>
           </div>
           <button
             onClick={() => load(true)}
             disabled={refreshing || loading}
-            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-text transition hover:border-accent hover:text-accent disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text transition hover:border-accent hover:text-accent disabled:opacity-50"
             aria-label="Refresh"
           >
             <RefreshCw
@@ -91,6 +97,8 @@ export default function DashboardPage() {
             Refresh
           </button>
         </header>
+
+        {data && <StatsRow data={data} />}
 
         {loading && (
           <div className="flex items-center gap-2 text-muted">
