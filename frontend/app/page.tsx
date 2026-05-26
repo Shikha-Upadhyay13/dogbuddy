@@ -2,13 +2,19 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { isLoggedIn } from "@/lib/auth";
+import { getUser, isLoggedIn } from "@/lib/auth";
 
 export default function HomePage() {
   const router = useRouter();
   useEffect(() => {
-    router.replace(isLoggedIn() ? "/dashboard" : "/login");
+    if (!isLoggedIn()) {
+      router.replace("/login");
+      return;
+    }
+    const user = getUser();
+    router.replace(user?.role === "staff" ? "/dashboard" : "/owner/dashboard");
   }, [router]);
+
   return (
     <div className="flex min-h-screen items-center justify-center text-muted">
       Loading DogBuddy...

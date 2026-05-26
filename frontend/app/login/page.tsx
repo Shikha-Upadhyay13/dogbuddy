@@ -32,7 +32,9 @@ export default function LoginPage() {
         { skipAuth: true },
       );
       saveAuth(res.token, res.staff);
-      router.replace("/dashboard");
+      router.replace(
+        res.staff.role === "staff" ? "/dashboard" : "/owner/dashboard",
+      );
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.status === 401 ? "Invalid phone or password" : err.detail);

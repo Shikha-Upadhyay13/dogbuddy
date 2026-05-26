@@ -1,9 +1,12 @@
 // TS shapes that mirror backend Pydantic schemas.
 
+export type UserRole = "staff" | "owner";
+
 export type Staff = {
   id: number;
   name: string;
   phone: string;
+  role: UserRole;
 };
 
 export type AuthResponse = {
