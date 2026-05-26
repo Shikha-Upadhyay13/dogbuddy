@@ -41,6 +41,7 @@ def seed_staff(session):
         name="Anand",
         phone="9999900001",
         password_hash=_hash("dogbuddy123"),
+        role="staff",
     )
     session.add(staff)
     session.flush()

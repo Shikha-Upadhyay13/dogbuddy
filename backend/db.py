@@ -54,12 +54,21 @@ def _now() -> datetime:
 
 
 class Staff(Base):
+    """The `staff` table now stores BOTH facility staff and dog owners.
+    `role` distinguishes: 'staff' = facility user (Anand etc.), 'owner' =
+    a dog owner who self-registered via /auth/signup.
+
+    Kept the table name `staff` for backward compat with existing data and
+    foreign keys, even though semantically it's now "users".
+    """
+
     __tablename__ = "staff"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     phone: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
+    role: Mapped[str] = mapped_column(String, nullable=False, default="owner")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
 
 
@@ -78,6 +87,11 @@ class Dog(Base):
     vaccination_expires: Mapped[Optional[date]] = mapped_column(Date)
     owner_name: Mapped[str] = mapped_column(String, nullable=False)
     owner_phone: Mapped[str] = mapped_column(String, nullable=False)
+    # Links the dog to a user-mode owner account, if the owner self-registered.
+    # NULL for legacy / seeded dogs (visible only to staff).
+    owner_user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("staff.id"), nullable=True
+    )
     vet_contact: Mapped[Optional[str]] = mapped_column(String)
     notes: Mapped[Optional[str]] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)

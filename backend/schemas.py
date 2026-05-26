@@ -25,6 +25,7 @@ class StaffOut(BaseModel):
     id: int
     name: str
     phone: str
+    role: str = "staff"
 
     model_config = {"from_attributes": True}
 
@@ -100,6 +101,30 @@ class ActivityUpdate(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     thread_id: str
+
+
+# --- Owner-mode requests ---
+
+
+class CreateDogRequest(BaseModel):
+    name: str = Field(min_length=1)
+    breed: str = Field(min_length=1)
+    age_years: int = Field(ge=0, le=30)
+    weight_kg: float = Field(gt=0, le=100)
+    diet: Optional[str] = None
+    medications: Optional[str] = None
+    allergies: Optional[str] = None
+    vaccination_status: str = Field(default="up_to_date")
+    vaccination_expires: Optional[date] = None
+    vet_contact: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class CreateBookingRequest(BaseModel):
+    dog_id: int
+    start_date: date
+    end_date: date
+    kennel_id: Optional[str] = None
 
 
 # --- Dashboard / detail composites ---
