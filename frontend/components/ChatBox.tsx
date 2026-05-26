@@ -50,8 +50,19 @@ function getSpeechCtor(): { new (): SpeechRecognitionLike } | null {
   return w.SpeechRecognition || w.webkitSpeechRecognition || null;
 }
 
+// localStorage key per thread so the cache rolls over with the agent's
+// daily memory window.
+function cacheKey(staffId: number): string {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `dogbuddy_chat_staff_${staffId}_${yyyy}_${mm}_${dd}`;
+}
+
 export default function ChatBox() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [hydrated, setHydrated] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -65,12 +76,48 @@ export default function ChatBox() {
     setSpeechAvailable(!!getSpeechCtor());
   }, []);
 
+  const user = getUser();
+
+  // Restore messages from localStorage on mount (client-only).
+  useEffect(() => {
+    if (!user) {
+      setHydrated(true);
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(cacheKey(user.id));
+      if (raw) {
+        const parsed = JSON.parse(raw) as ChatMessage[];
+        if (Array.isArray(parsed)) {
+          // Ensure no message is left in a streaming/thinking state if the
+          // user navigated away mid-stream — mark them done so the cursor
+          // doesn't blink forever.
+          setMessages(
+            parsed.map((m) => ({ ...m, done: true, thinking: false })),
+          );
+        }
+      }
+    } catch {
+      /* ignore corrupt cache */
+    }
+    setHydrated(true);
+  }, [user]);
+
+  // Save on every change once we've hydrated (otherwise the empty initial
+  // state would overwrite a real saved conversation on mount).
+  useEffect(() => {
+    if (!hydrated || !user) return;
+    try {
+      window.localStorage.setItem(cacheKey(user.id), JSON.stringify(messages));
+    } catch {
+      /* localStorage full or unavailable */
+    }
+  }, [messages, hydrated, user]);
+
   useEffect(() => {
     const el = scrollerRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
-
-  const user = getUser();
 
   const send = useCallback(
     async (text: string) => {
