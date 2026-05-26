@@ -29,7 +29,9 @@ from audit import write_audit
 from auth import (
     create_access_token,
     get_current_staff,
+    get_current_user,
     hash_password,
+    require_role,
     verify_password,
 )
 from db import Booking, Dog, Incident, Staff, get_db, init_db
@@ -39,6 +41,8 @@ from schemas import (
     BookingOut,
     BookingsTodayOut,
     ChatRequest,
+    CreateBookingRequest,
+    CreateDogRequest,
     DogDetailOut,
     DogOut,
     IncidentIn,
@@ -99,35 +103,38 @@ def health() -> dict:
     "/auth/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED
 )
 def signup(body: SignupRequest, db: Session = Depends(get_db)) -> AuthResponse:
+    """Self-service signup ALWAYS creates an owner. Staff are seeded; we
+    never expose staff signup through the UI."""
     existing = db.query(Staff).filter(Staff.phone == body.phone).first()
     if existing:
         raise HTTPException(status_code=400, detail="Phone already registered")
 
-    staff = Staff(
+    user = Staff(
         name=body.name,
         phone=body.phone,
         password_hash=hash_password(body.password),
+        role="owner",
     )
-    db.add(staff)
+    db.add(user)
     db.commit()
-    db.refresh(staff)
+    db.refresh(user)
 
-    token = create_access_token(staff.id)
-    return AuthResponse(token=token, staff=StaffOut.model_validate(staff))
+    token = create_access_token(user.id)
+    return AuthResponse(token=token, staff=StaffOut.model_validate(user))
 
 
 @app.post("/auth/login", response_model=AuthResponse)
 def login(body: LoginRequest, db: Session = Depends(get_db)) -> AuthResponse:
-    staff = db.query(Staff).filter(Staff.phone == body.phone).first()
-    if staff is None or not verify_password(body.password, staff.password_hash):
+    user = db.query(Staff).filter(Staff.phone == body.phone).first()
+    if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid phone or password")
 
-    token = create_access_token(staff.id)
-    return AuthResponse(token=token, staff=StaffOut.model_validate(staff))
+    token = create_access_token(user.id)
+    return AuthResponse(token=token, staff=StaffOut.model_validate(user))
 
 
 @app.get("/auth/me", response_model=StaffOut)
-def me(current: Staff = Depends(get_current_staff)) -> StaffOut:
+def me(current: Staff = Depends(get_current_user)) -> StaffOut:
     return StaffOut.model_validate(current)
 
 
@@ -145,24 +152,84 @@ def list_dogs(
     return [DogOut.model_validate(d) for d in rows]
 
 
+# Specific routes (/dogs/mine) MUST be declared before parameterised routes
+# (/dogs/{dog_id}) or FastAPI will try to parse "mine" as an int and 422.
+
+
+@app.get("/dogs/mine", response_model=list[DogOut])
+def list_my_dogs(
+    db: Session = Depends(get_db),
+    current: Staff = Depends(require_role("owner")),
+) -> list[DogOut]:
+    rows = (
+        db.query(Dog)
+        .filter(Dog.owner_user_id == current.id)
+        .order_by(Dog.name)
+        .all()
+    )
+    return [DogOut.model_validate(d) for d in rows]
+
+
+@app.post("/dogs", response_model=DogOut, status_code=status.HTTP_201_CREATED)
+def register_dog(
+    body: CreateDogRequest,
+    db: Session = Depends(get_db),
+    current: Staff = Depends(require_role("owner")),
+) -> DogOut:
+    """Owner registers their own dog. owner_name/phone are pulled from
+    the logged-in user; owner_user_id links the dog to that account."""
+    dog = Dog(
+        name=body.name,
+        breed=body.breed,
+        age_years=body.age_years,
+        weight_kg=body.weight_kg,
+        diet=body.diet,
+        medications=body.medications,
+        allergies=body.allergies,
+        vaccination_status=body.vaccination_status,
+        vaccination_expires=body.vaccination_expires,
+        owner_name=current.name,
+        owner_phone=current.phone,
+        owner_user_id=current.id,
+        vet_contact=body.vet_contact,
+        notes=body.notes,
+    )
+    db.add(dog)
+    db.commit()
+    db.refresh(dog)
+
+    write_audit(
+        db,
+        staff_id=current.id,
+        action="register_dog",
+        target_type="dog",
+        target_id=dog.id,
+        details={"name": dog.name, "breed": dog.breed, "via": "owner"},
+    )
+    db.commit()
+    return DogOut.model_validate(dog)
+
+
 @app.get("/dogs/{dog_id}", response_model=DogDetailOut)
 def get_dog(
     dog_id: int,
     db: Session = Depends(get_db),
-    _: Staff = Depends(get_current_staff),
+    current: Staff = Depends(get_current_user),
 ) -> DogDetailOut:
+    """Staff sees any dog; owner sees their own (404 otherwise so we don't
+    leak which IDs exist)."""
     dog = db.get(Dog, dog_id)
     if dog is None:
         raise HTTPException(status_code=404, detail="Dog not found")
+    if current.role == "owner" and dog.owner_user_id != current.id:
+        raise HTTPException(status_code=404, detail="Dog not found")
 
-    # Current booking = most recent booking by start_date (ties broken by id).
-    current = (
+    booking = (
         db.query(Booking)
         .filter(Booking.dog_id == dog_id)
         .order_by(Booking.start_date.desc(), Booking.id.desc())
         .first()
     )
-
     recent = (
         db.query(Incident)
         .filter(Incident.dog_id == dog_id)
@@ -173,7 +240,7 @@ def get_dog(
 
     return DogDetailOut(
         **DogOut.model_validate(dog).model_dump(),
-        current_booking=BookingOut.model_validate(current) if current else None,
+        current_booking=BookingOut.model_validate(booking) if booking else None,
         recent_incidents=[IncidentOut.model_validate(i) for i in recent],
     )
 
@@ -310,6 +377,73 @@ def update_booking_activity(
     db.commit()
     db.refresh(booking)
     return BookingOut.model_validate(booking)
+
+
+# ---------------------------------------------------------------------------
+# Owner-mode: create-booking + my-bookings
+# ---------------------------------------------------------------------------
+
+
+@app.post("/bookings", response_model=BookingOut, status_code=status.HTTP_201_CREATED)
+def create_booking(
+    body: CreateBookingRequest,
+    db: Session = Depends(get_db),
+    current: Staff = Depends(require_role("owner")),
+) -> BookingOut:
+    """Owner books a stay for one of THEIR dogs. Initial status='scheduled'.
+    Staff can flip it to checked_in/in_care/checked_out via PATCH later."""
+    if body.end_date < body.start_date:
+        raise HTTPException(status_code=422, detail="end_date must be >= start_date")
+
+    dog = db.get(Dog, body.dog_id)
+    if dog is None:
+        raise HTTPException(status_code=404, detail="Dog not found")
+    if dog.owner_user_id != current.id:
+        raise HTTPException(
+            status_code=403, detail="You can only book stays for your own dogs"
+        )
+
+    booking = Booking(
+        dog_id=dog.id,
+        start_date=body.start_date,
+        end_date=body.end_date,
+        status="scheduled",
+        kennel_id=body.kennel_id,
+    )
+    db.add(booking)
+    db.flush()
+
+    write_audit(
+        db,
+        staff_id=current.id,
+        action="create_booking",
+        target_type="booking",
+        target_id=booking.id,
+        details={
+            "dog_id": dog.id,
+            "start_date": body.start_date.isoformat(),
+            "end_date": body.end_date.isoformat(),
+            "via": "owner",
+        },
+    )
+    db.commit()
+    db.refresh(booking)
+    return BookingOut.model_validate(booking)
+
+
+@app.get("/bookings/mine", response_model=list[BookingOut])
+def list_my_bookings(
+    db: Session = Depends(get_db),
+    current: Staff = Depends(require_role("owner")),
+) -> list[BookingOut]:
+    rows = (
+        db.query(Booking)
+        .join(Dog, Booking.dog_id == Dog.id)
+        .filter(Dog.owner_user_id == current.id)
+        .order_by(Booking.start_date.desc())
+        .all()
+    )
+    return [BookingOut.model_validate(b) for b in rows]
 
 
 # ---------------------------------------------------------------------------
