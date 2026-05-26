@@ -1,7 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Send, Mic, MicOff, ArrowLeft, Loader2, Sparkles } from "lucide-react";
+import {
+  Send,
+  Mic,
+  MicOff,
+  ArrowLeft,
+  Loader2,
+  Sparkles,
+  Plus,
+} from "lucide-react";
 import Link from "next/link";
 
 import { API_BASE } from "@/lib/api";
@@ -19,13 +27,16 @@ const SUGGESTED_PROMPTS = [
   { text: "Symptoms of heatstroke in dogs?", hint: "search the web" },
 ];
 
-// thread_id per PRD line 353: staff_{staff_id}_{YYYY_MM_DD}
-function threadIdFor(staffId: number): string {
+// thread_id per PRD line 353: staff_{staff_id}_{YYYY_MM_DD}.
+// `sessionSuffix` lets the "+ New Chat" button start a fresh thread within
+// the same day so the agent's memory resets without waiting for midnight.
+function threadIdFor(staffId: number, sessionSuffix?: string): string {
   const d = new Date();
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
-  return `staff_${staffId}_${yyyy}_${mm}_${dd}`;
+  const base = `staff_${staffId}_${yyyy}_${mm}_${dd}`;
+  return sessionSuffix ? `${base}_s${sessionSuffix}` : base;
 }
 
 // Web Speech API typing (browser-prefixed, not in lib.dom).
@@ -50,14 +61,11 @@ function getSpeechCtor(): { new (): SpeechRecognitionLike } | null {
   return w.SpeechRecognition || w.webkitSpeechRecognition || null;
 }
 
-// localStorage key per thread so the cache rolls over with the agent's
-// daily memory window.
-function cacheKey(staffId: number): string {
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `dogbuddy_chat_staff_${staffId}_${yyyy}_${mm}_${dd}`;
+// localStorage key per (staff, thread). Keyed off thread_id so each
+// "+ New Chat" session gets its own cache and the agent's memory resets
+// in lockstep with what the UI shows.
+function cacheKeyForThread(threadId: string): string {
+  return `dogbuddy_chat_${threadId}`;
 }
 
 export default function ChatBox() {
@@ -76,43 +84,67 @@ export default function ChatBox() {
     setSpeechAvailable(!!getSpeechCtor());
   }, []);
 
-  const user = getUser();
+  // getUser() parses fresh from localStorage on every call -- capture it
+  // ONCE so the reference is stable for the lifetime of the component.
+  const [user] = useState(() => getUser());
 
-  // Restore messages from localStorage on mount (client-only).
+  // Active thread id. Default to today's date-based id (the natural
+  // continuous-day thread). The "+ New Chat" button sets this to a new
+  // value with a session suffix.
+  const [threadId, setThreadId] = useState(() =>
+    user ? threadIdFor(user.id) : "",
+  );
+
+  // Restore messages from the active thread's localStorage cache. Re-fires
+  // when threadId changes (e.g. user hit "+ New Chat" then switched back
+  // to an older thread, if we add a history list later).
   useEffect(() => {
-    if (!user) {
+    if (!user || !threadId) {
       setHydrated(true);
       return;
     }
     try {
-      const raw = window.localStorage.getItem(cacheKey(user.id));
+      const raw = window.localStorage.getItem(cacheKeyForThread(threadId));
       if (raw) {
         const parsed = JSON.parse(raw) as ChatMessage[];
         if (Array.isArray(parsed)) {
-          // Ensure no message is left in a streaming/thinking state if the
-          // user navigated away mid-stream — mark them done so the cursor
-          // doesn't blink forever.
           setMessages(
             parsed.map((m) => ({ ...m, done: true, thinking: false })),
           );
+        } else {
+          setMessages([]);
         }
+      } else {
+        setMessages([]);
       }
     } catch {
-      /* ignore corrupt cache */
+      setMessages([]);
     }
     setHydrated(true);
-  }, [user]);
+  }, [threadId, user]);
 
-  // Save on every change once we've hydrated (otherwise the empty initial
-  // state would overwrite a real saved conversation on mount).
+  // Save on every messages change once we've hydrated.
   useEffect(() => {
-    if (!hydrated || !user) return;
+    if (!hydrated || !threadId) return;
     try {
-      window.localStorage.setItem(cacheKey(user.id), JSON.stringify(messages));
+      window.localStorage.setItem(
+        cacheKeyForThread(threadId),
+        JSON.stringify(messages),
+      );
     } catch {
       /* localStorage full or unavailable */
     }
-  }, [messages, hydrated, user]);
+  }, [messages, hydrated, threadId]);
+
+  const newChat = () => {
+    if (!user) return;
+    // Don't interrupt an in-flight stream.
+    if (sending) abortRef.current?.abort();
+    const suffix = String(Date.now());
+    setThreadId(threadIdFor(user.id, suffix));
+    setMessages([]);
+    setInput("");
+  };
 
   useEffect(() => {
     const el = scrollerRef.current;
@@ -159,7 +191,7 @@ export default function ChatBox() {
           },
           body: JSON.stringify({
             message: trimmed,
-            thread_id: threadIdFor(user.id),
+            thread_id: threadId,
           }),
           signal: controller.signal,
         });
@@ -232,7 +264,7 @@ export default function ChatBox() {
         setSending(false);
       }
     },
-    [sending, user],
+    [sending, user, threadId],
   );
 
   const updateAsst = (id: string, fn: (m: ChatMessage) => ChatMessage) => {
@@ -286,14 +318,24 @@ export default function ChatBox() {
     <div className="flex h-[100dvh] flex-col md:ml-60 md:h-[100dvh]">
       {/* Mobile-only header (desktop has Sidebar) */}
       <header className="flex items-center justify-between border-b border-border bg-bg/85 px-4 py-3 backdrop-blur md:hidden">
-        <h1 className="text-sm font-semibold">DogBuddy</h1>
-        <Link
-          href="/dashboard"
-          className="rounded p-1 text-muted transition hover:bg-border/40 hover:text-text"
-          aria-label="Back to dashboard"
+        <div className="flex items-center gap-2">
+          <Link
+            href="/dashboard"
+            className="rounded p-1 text-muted transition hover:bg-border/40 hover:text-text"
+            aria-label="Back to dashboard"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <h1 className="text-sm font-semibold">DogBuddy</h1>
+        </div>
+        <button
+          onClick={newChat}
+          className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text transition hover:border-accent hover:text-accent"
+          aria-label="New chat"
         >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
+          <Plus className="h-3.5 w-3.5" />
+          New
+        </button>
       </header>
 
       {/* Desktop chat header */}
@@ -302,15 +344,22 @@ export default function ChatBox() {
           <h1 className="text-sm font-semibold tracking-tight text-text">
             Ask DogBuddy
           </h1>
-          <p className="font-mono text-[11px] text-muted">
-            thread · staff_{user?.id}_
-            {new Date().toISOString().slice(0, 10).replaceAll("-", "_")}
-          </p>
+          <p className="font-mono text-[11px] text-muted">thread · {threadId}</p>
         </div>
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 font-mono text-[11px] text-muted">
-          <span className="h-1.5 w-1.5 rounded-full bg-success" /> live ·
-          gpt-4o-mini
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 font-mono text-[11px] text-muted">
+            <span className="h-1.5 w-1.5 rounded-full bg-success" /> live ·
+            gpt-4o-mini
+          </span>
+          <button
+            onClick={newChat}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1 text-xs font-medium text-text transition hover:border-accent hover:text-accent"
+            title="Start a new chat (resets the agent's memory)"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New chat
+          </button>
+        </div>
       </header>
 
       {/* Messages */}
