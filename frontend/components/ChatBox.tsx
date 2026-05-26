@@ -231,8 +231,9 @@ export default function ChatBox() {
   };
 
   return (
-    <div className="mx-auto flex h-[100dvh] max-w-3xl flex-col">
-      <header className="flex items-center justify-between border-b border-border px-4 py-3">
+    <div className="mx-auto flex h-[100dvh] max-w-3xl flex-col md:h-[calc(100dvh-3.5rem)]">
+      {/* Mobile-only header (desktop has the TopNav above) */}
+      <header className="flex items-center justify-between border-b border-border px-4 py-3 md:hidden">
         <h1 className="text-lg font-semibold">DogBuddy</h1>
         <Link
           href="/dashboard"
@@ -271,7 +272,7 @@ export default function ChatBox() {
 
       <form
         onSubmit={onSubmit}
-        className="fixed inset-x-0 bottom-14 z-20 border-t border-border bg-bg/95 px-3 py-3 backdrop-blur"
+        className="fixed inset-x-0 bottom-14 z-20 border-t border-border bg-bg/95 px-3 py-3 backdrop-blur md:bottom-0"
       >
         <div className="mx-auto flex max-w-3xl items-center gap-2">
           {speechAvailable && (

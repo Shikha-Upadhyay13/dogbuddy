@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   ChevronDown,
   ChevronRight,
@@ -12,10 +11,10 @@ import {
 
 import AuthGate from "@/components/AuthGate";
 import BottomNav from "@/components/BottomNav";
+import TopNav from "@/components/TopNav";
 import DogCard from "@/components/DogCard";
 import DogDetailModal from "@/components/DogDetailModal";
 import { api, ApiError } from "@/lib/api";
-import { clearAuth, getUser } from "@/lib/auth";
 import type { BookingsToday, TodayBookingItem } from "@/lib/types";
 
 type SectionKey = "checking_in" | "in_care" | "checking_out";
@@ -27,7 +26,6 @@ const SECTION_TITLES: Record<SectionKey, string> = {
 };
 
 export default function DashboardPage() {
-  const router = useRouter();
   const [data, setData] = useState<BookingsToday | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -38,8 +36,6 @@ export default function DashboardPage() {
     checking_out: true,
   });
   const [selected, setSelected] = useState<TodayBookingItem | null>(null);
-
-  const user = getUser();
 
   const load = useCallback(async (silent = false) => {
     if (silent) setRefreshing(true);
@@ -64,37 +60,36 @@ export default function DashboardPage() {
     load();
   }, [load]);
 
-  const onLogout = () => {
-    clearAuth();
-    router.replace("/login");
-  };
-
   const toggle = (k: SectionKey) => setOpen((o) => ({ ...o, [k]: !o[k] }));
 
   return (
     <AuthGate>
-      <main className="mx-auto max-w-3xl px-4 pb-24 pt-6">
-        <header className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">Today</h1>
-          <div className="flex items-center gap-2 text-sm text-muted">
-            <button
-              onClick={() => load(true)}
-              disabled={refreshing || loading}
-              className="rounded p-2 text-muted transition hover:bg-border/40 hover:text-text disabled:opacity-50"
-              aria-label="Refresh"
-            >
-              <RefreshCw
-                className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-              />
-            </button>
-            <span>{user?.name ?? "Staff"}</span>
-            <button
-              onClick={onLogout}
-              className="rounded border border-border px-2 py-1 text-text transition hover:border-accent hover:text-accent"
-            >
-              Logout
-            </button>
+      <TopNav />
+      <main className="mx-auto max-w-6xl px-4 pb-24 pt-6 md:px-8 md:pt-8">
+        <header className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight">Today</h1>
+            <p className="mt-1 text-sm text-muted">
+              {data
+                ? `${
+                    data.checking_in.length +
+                    data.in_care.length +
+                    data.checking_out.length
+                  } active bookings`
+                : "Loading bookings..."}
+            </p>
           </div>
+          <button
+            onClick={() => load(true)}
+            disabled={refreshing || loading}
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-text transition hover:border-accent hover:text-accent disabled:opacity-50"
+            aria-label="Refresh"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+            />
+            Refresh
+          </button>
         </header>
 
         {loading && (
@@ -110,7 +105,7 @@ export default function DashboardPage() {
         )}
 
         {data && (
-          <div className="space-y-6">
+          <div className="space-y-8">
             {(Object.keys(SECTION_TITLES) as SectionKey[]).map((key) => {
               const items = data[key];
               const expanded = open[key];
@@ -118,7 +113,7 @@ export default function DashboardPage() {
                 <section key={key}>
                   <button
                     onClick={() => toggle(key)}
-                    className="mb-2 flex w-full items-center gap-2 text-left"
+                    className="mb-3 flex w-full items-center gap-2 text-left"
                   >
                     {expanded ? (
                       <ChevronDown className="h-4 w-4 text-muted" />
@@ -133,9 +128,9 @@ export default function DashboardPage() {
                     </span>
                   </button>
                   {expanded && (
-                    <div className="space-y-2">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                       {items.length === 0 ? (
-                        <p className="rounded-lg border border-dashed border-border px-3 py-4 text-sm text-muted">
+                        <p className="col-span-full rounded-lg border border-dashed border-border px-3 py-6 text-sm text-muted">
                           No dogs in this section right now.
                         </p>
                       ) : (

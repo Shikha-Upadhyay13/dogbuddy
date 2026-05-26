@@ -54,7 +54,14 @@ app = FastAPI(title="DogBuddy API", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    # localhost and 127.0.0.1 are different origins from the browser's
+    # perspective, so we whitelist both for dev. Also allow any localhost:*
+    # port via regex in case Next.js picks a different port.
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
