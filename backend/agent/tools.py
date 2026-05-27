@@ -111,7 +111,10 @@ def make_tools(staff_id: int) -> list:
             if query_type == "upcoming_bookings":
                 today = date.today()
                 dog_name = (params_local.get("dog_name") or "").strip()
-                q = db.query(Booking).filter(Booking.end_date >= today)
+                # start_date > today (strictly future) -- excludes dogs
+                # already in care today. For currently-staying dogs use
+                # `todays_bookings` instead.
+                q = db.query(Booking).filter(Booking.start_date > today)
                 if dog_name:
                     target = _find_dog_by_name(db, dog_name)
                     if target is None:
