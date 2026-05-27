@@ -136,6 +136,21 @@ export default function ChatBox() {
     setInput("");
   };
 
+  // Deep-link prefill: other pages can navigate to /chat?thread=...&q=...
+  // and we'll drop the question into the composer ready for review.
+  // (Doesn't auto-send — gives the user a chance to edit first.)
+  const prefillQ = searchParams?.get("q") ?? "";
+  useEffect(() => {
+    if (prefillQ && !input) {
+      setInput(prefillQ);
+      // Strip the q param so a refresh doesn't keep re-injecting it.
+      const url = new URL(window.location.href);
+      url.searchParams.delete("q");
+      router.replace(url.pathname + url.search);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillQ]);
+
   useEffect(() => {
     const el = scrollerRef.current;
     if (el) el.scrollTop = el.scrollHeight;
