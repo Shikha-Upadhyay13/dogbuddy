@@ -9,6 +9,7 @@ import {
   Loader2,
   Sparkles,
   Plus,
+  Stethoscope,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -347,9 +348,21 @@ export default function ChatBox() {
           <p className="font-mono text-[11px] text-muted">thread · {threadId}</p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Agent constellation badge — clarifies that this is a
+              multi-agent setup. The main agent delegates to health_advisor
+              for medical questions. */}
+          <span
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 font-mono text-[11px] text-muted"
+            title="Main agent (DogBuddy) delegates to Health Advisor for medical questions"
+          >
+            <Sparkles className="h-3 w-3 text-accent" />
+            <span className="text-text">DogBuddy</span>
+            <span>+</span>
+            <Stethoscope className="h-3 w-3 text-accent" />
+            <span className="text-text">Health Advisor</span>
+          </span>
           <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 font-mono text-[11px] text-muted">
-            <span className="h-1.5 w-1.5 rounded-full bg-success" /> live ·
-            gpt-4o-mini
+            <span className="h-1.5 w-1.5 rounded-full bg-success" /> gpt-4o-mini
           </span>
           <button
             onClick={newChat}

@@ -1,6 +1,13 @@
 "use client";
 
-import { Wrench, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Wrench, CheckCircle2, AlertTriangle, Stethoscope } from "lucide-react";
+
+// Friendly labels for known sub-agents the main agent can delegate to via
+// the deepagents `task` tool. Keys are the sub-agent name; values are
+// what the user sees.
+const SUBAGENT_LABEL: Record<string, string> = {
+  health_advisor: "Health Advisor",
+};
 
 export type ToolEvent = {
   name: string;
@@ -77,6 +84,13 @@ function Dot({ delay }: { delay: number }) {
 }
 
 function ToolChip({ tool }: { tool: ToolEvent }) {
+  // `task` is the auto-injected delegation tool from deepagents. Render it
+  // specially so users see WHICH specialist agent is being consulted, not
+  // just an opaque "task" call.
+  if (tool.name === "task") {
+    return <SubAgentChip tool={tool} />;
+  }
+
   const inFlight = tool.result === undefined;
   const argSummary = tool.args ? summarizeArgs(tool.args) : "";
 
@@ -106,6 +120,50 @@ function ToolChip({ tool }: { tool: ToolEvent }) {
             {firstLine(tool.result)}
           </span>
         </>
+      )}
+    </div>
+  );
+}
+
+function SubAgentChip({ tool }: { tool: ToolEvent }) {
+  const inFlight = tool.result === undefined;
+  const args = tool.args ?? {};
+  // deepagents passes the target sub-agent name in `subagent_type` and the
+  // question in `description`.
+  const subagent = String(
+    args.subagent_type ?? args.subagentType ?? "subagent",
+  );
+  const friendly = SUBAGENT_LABEL[subagent] ?? subagent;
+  const question = String(args.description ?? args.task ?? "");
+
+  return (
+    <div
+      className={`max-w-full rounded-md border px-2.5 py-1.5 text-[11px] ${
+        inFlight
+          ? "border-accent/40 bg-accent/5 text-accent"
+          : "border-border bg-bg text-muted"
+      }`}
+    >
+      <div className="flex items-center gap-1.5">
+        <Stethoscope
+          className={`h-3.5 w-3.5 ${inFlight ? "animate-pulse" : "text-success"}`}
+        />
+        <span className="font-semibold text-text">
+          {inFlight ? `Consulting ${friendly}` : `${friendly} consulted`}
+        </span>
+        <span className="rounded-sm bg-border/40 px-1 font-mono text-[9px] uppercase tracking-wider text-muted">
+          sub-agent
+        </span>
+      </div>
+      {question && (
+        <div className="mt-0.5 truncate pl-5 text-muted">
+          on: &ldquo;{question}&rdquo;
+        </div>
+      )}
+      {!inFlight && tool.result && (
+        <div className="mt-0.5 max-w-[60ch] truncate pl-5 text-muted">
+          → {firstLine(tool.result)}
+        </div>
       )}
     </div>
   );
