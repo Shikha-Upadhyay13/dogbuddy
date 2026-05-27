@@ -46,7 +46,11 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       "/owners",
     ];
     if (loggedIn && user) {
-      const isOwnerOnly = pathname?.startsWith("/owner");
+      // Match /owner exactly or /owner/* -- but NOT /owners (plural,
+      // staff-only directory page). String.startsWith("/owner") would
+      // catch both.
+      const isOwnerOnly =
+        pathname === "/owner" || pathname?.startsWith("/owner/");
       const isStaffOnly = STAFF_ONLY_PREFIXES.some((p) =>
         pathname?.startsWith(p),
       );
