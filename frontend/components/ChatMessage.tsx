@@ -1,6 +1,7 @@
 "use client";
 
 import { Wrench, CheckCircle2, AlertTriangle, Stethoscope } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 
 // Friendly labels for known sub-agents the main agent can delegate to via
 // the deepagents `task` tool. Keys are the sub-agent name; values are
@@ -55,8 +56,54 @@ export default function ChatMessageView({ msg }: { msg: ChatMessage }) {
         )}
 
         {msg.text && (
-          <div className="whitespace-pre-wrap rounded-lg rounded-bl-sm border border-border bg-surface px-3.5 py-2 text-sm leading-relaxed text-text">
-            {msg.text}
+          <div className="rounded-lg rounded-bl-sm border border-border bg-surface px-3.5 py-2 text-sm leading-relaxed text-text">
+            <ReactMarkdown
+              components={{
+                // Tight spacing inside chat bubbles.
+                p: ({ children }) => (
+                  <p className="mb-2 last:mb-0">{children}</p>
+                ),
+                strong: ({ children }) => (
+                  <strong className="font-semibold text-text">
+                    {children}
+                  </strong>
+                ),
+                em: ({ children }) => <em className="italic">{children}</em>,
+                ul: ({ children }) => (
+                  <ul className="my-2 ml-4 list-disc space-y-0.5">
+                    {children}
+                  </ul>
+                ),
+                ol: ({ children }) => (
+                  <ol className="my-2 ml-5 list-decimal space-y-0.5">
+                    {children}
+                  </ol>
+                ),
+                li: ({ children }) => <li>{children}</li>,
+                a: ({ href, children }) => (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-accent underline-offset-2 hover:underline"
+                  >
+                    {children}
+                  </a>
+                ),
+                code: ({ children }) => (
+                  <code className="rounded bg-bg/60 px-1 font-mono text-[12px] text-text">
+                    {children}
+                  </code>
+                ),
+                pre: ({ children }) => (
+                  <pre className="my-2 overflow-x-auto rounded-md border border-border bg-bg/60 p-2 font-mono text-[12px]">
+                    {children}
+                  </pre>
+                ),
+              }}
+            >
+              {msg.text}
+            </ReactMarkdown>
             {!msg.done && (
               <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-accent align-middle" />
             )}
