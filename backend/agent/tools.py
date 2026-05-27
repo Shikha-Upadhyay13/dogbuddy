@@ -22,7 +22,7 @@ from langchain_core.tools import tool
 from sqlalchemy import select
 
 from audit import write_audit
-from db import Booking, Dog, Incident, SessionLocal
+from db import Booking, Dog, Incident, SessionLocal, Staff
 
 load_dotenv()
 
@@ -407,4 +407,162 @@ def make_tools(staff_id: int) -> list:
         except Exception as e:
             return f"Web search error - {e}."
 
-    return [query_db, update_status, log_incident, web_search]
+    _VACC = {"up_to_date", "expiring_soon", "expired"}
+
+    @tool
+    def register_dog(
+        name: str,
+        breed: str,
+        age_years: int,
+        weight_kg: float,
+        diet: Optional[str] = None,
+        medications: Optional[str] = None,
+        allergies: Optional[str] = None,
+        vaccination_status: str = "up_to_date",
+        vet_contact: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> str:
+        """
+        Register a new dog under the current user's account. Use this when
+        the OWNER (not staff) wants to add a dog to their profile, typically
+        as a prelude to booking a stay.
+
+        Required: name, breed, age_years, weight_kg.
+        Optional: diet, medications, allergies, vaccination_status
+                  (up_to_date / expiring_soon / expired), vet_contact, notes.
+
+        Returns: confirmation with the new dog id.
+        """
+        db = SessionLocal()
+        try:
+            user = db.get(Staff, staff_id)
+            if user is None:
+                return "Error: current user not found."
+            if user.role != "owner":
+                return (
+                    "Error: only owners can register a dog. Staff should "
+                    "create dogs through the seed data, not via chat."
+                )
+            if vaccination_status not in _VACC:
+                return (
+                    f"Error: vaccination_status must be one of "
+                    f"{sorted(_VACC)}, got {vaccination_status!r}."
+                )
+            dog = Dog(
+                name=name,
+                breed=breed,
+                age_years=age_years,
+                weight_kg=weight_kg,
+                diet=diet,
+                medications=medications,
+                allergies=allergies,
+                vaccination_status=vaccination_status,
+                owner_name=user.name,
+                owner_phone=user.phone,
+                owner_user_id=user.id,
+                vet_contact=vet_contact,
+                notes=notes,
+            )
+            db.add(dog)
+            db.flush()
+            write_audit(
+                db,
+                staff_id=staff_id,
+                action="register_dog",
+                target_type="dog",
+                target_id=dog.id,
+                details={"name": name, "breed": breed, "via": "agent"},
+            )
+            db.commit()
+            return f"Registered {name} (#{dog.id}) - {breed}, {age_years}y, {weight_kg}kg."
+        except Exception as e:
+            db.rollback()
+            return f"Could not register dog - {e}."
+        finally:
+            db.close()
+
+    @tool
+    def create_booking(
+        dog_name: str,
+        start_date: str,
+        end_date: str,
+        kennel_id: Optional[str] = None,
+    ) -> str:
+        """
+        Create a booking (a stay) for one of the OWNER'S dogs. Use this
+        when an owner says something like "book Bruno from Dec 20 to Dec 28."
+
+        dates: ISO format (YYYY-MM-DD).
+        kennel_id: optional preferred kennel.
+
+        Owners can only book stays for dogs THEY registered. Staff cannot
+        use this tool (staff create bookings via the dashboard).
+
+        Returns: confirmation with the new booking id and dates.
+        """
+        db = SessionLocal()
+        try:
+            user = db.get(Staff, staff_id)
+            if user is None:
+                return "Error: current user not found."
+            if user.role != "owner":
+                return "Error: only owners can create bookings via chat."
+
+            try:
+                start = date.fromisoformat(start_date)
+                end = date.fromisoformat(end_date)
+            except ValueError:
+                return (
+                    f"Error: dates must be YYYY-MM-DD. "
+                    f"Got start={start_date!r}, end={end_date!r}."
+                )
+            if end < start:
+                return "Error: end_date must be on or after start_date."
+
+            dog = _find_dog_by_name(db, dog_name)
+            if dog is None:
+                return f"No dog named '{dog_name}' found - register them first."
+            if dog.owner_user_id != user.id:
+                return f"'{dog.name}' isn't on your profile - you can only book stays for your own dogs."
+
+            booking = Booking(
+                dog_id=dog.id,
+                start_date=start,
+                end_date=end,
+                status="scheduled",
+                kennel_id=kennel_id,
+            )
+            db.add(booking)
+            db.flush()
+            write_audit(
+                db,
+                staff_id=staff_id,
+                action="create_booking",
+                target_type="booking",
+                target_id=booking.id,
+                details={
+                    "dog_id": dog.id,
+                    "start_date": start.isoformat(),
+                    "end_date": end.isoformat(),
+                    "via": "agent",
+                },
+            )
+            db.commit()
+            return (
+                f"Booked stay #{booking.id} for {dog.name}: "
+                f"{start.isoformat()} to {end.isoformat()}."
+            )
+        except Exception as e:
+            db.rollback()
+            return f"Could not create booking - {e}."
+        finally:
+            db.close()
+
+    return [
+        query_db,
+        update_status,
+        log_incident,
+        web_search,
+        register_dog,
+        create_booking,
+    ]
