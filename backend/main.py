@@ -49,6 +49,7 @@ from schemas import (
     IncidentIn,
     IncidentOut,
     LoginRequest,
+    OwnerOut,
     SignupRequest,
     StaffOut,
     StatusUpdate,
@@ -507,6 +508,38 @@ def recent_incidents(
 ) -> list[IncidentOut]:
     rows = db.query(Incident).order_by(Incident.created_at.desc()).limit(20).all()
     return [IncidentOut.model_validate(i) for i in rows]
+
+
+# ---------------------------------------------------------------------------
+# Owners (staff directory of customer accounts)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/owners", response_model=list[OwnerOut])
+def list_owners(
+    db: Session = Depends(get_db),
+    _: Staff = Depends(get_current_staff),
+) -> list[OwnerOut]:
+    """Staff-only directory of owner accounts with their dog count."""
+    rows = (
+        db.query(Staff)
+        .filter(Staff.role == "owner")
+        .order_by(Staff.created_at.desc())
+        .all()
+    )
+    out: list[OwnerOut] = []
+    for u in rows:
+        n = db.query(Dog).filter(Dog.owner_user_id == u.id).count()
+        out.append(
+            OwnerOut(
+                id=u.id,
+                name=u.name,
+                phone=u.phone,
+                created_at=u.created_at,
+                dog_count=n,
+            )
+        )
+    return out
 
 
 # ---------------------------------------------------------------------------

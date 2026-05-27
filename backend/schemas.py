@@ -127,6 +127,14 @@ class CreateBookingRequest(BaseModel):
     kennel_id: Optional[str] = None
 
 
+class OwnerOut(BaseModel):
+    id: int
+    name: str
+    phone: str
+    created_at: datetime
+    dog_count: int
+
+
 class AuditLogOut(BaseModel):
     id: int
     staff_id: int

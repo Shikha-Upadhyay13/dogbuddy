@@ -74,6 +74,14 @@ export type BookingsToday = {
   checking_out: TodayBookingItem[];
 };
 
+export type Owner = {
+  id: number;
+  name: string;
+  phone: string;
+  created_at: string;
+  dog_count: number;
+};
+
 export type AuditEntry = {
   id: number;
   staff_id: number;
