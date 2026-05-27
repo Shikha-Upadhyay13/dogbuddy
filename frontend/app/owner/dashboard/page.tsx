@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Dog as DogIcon,
@@ -99,14 +100,13 @@ export default function OwnerDashboardPage() {
                     {String(dogs?.length ?? 0).padStart(2, "0")}
                   </span>
                 </div>
-                <button
-                  disabled
-                  title="Coming next: register-a-dog form"
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1 text-xs text-muted opacity-60"
+                <Link
+                  href="/owner/register-dog"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1 text-xs font-medium text-text transition hover:border-accent hover:text-accent"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   Register a dog
-                </button>
+                </Link>
               </div>
 
               {dogs && dogs.length > 0 ? (
