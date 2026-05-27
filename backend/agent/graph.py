@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import AsyncIterator, Optional
 
 import aiosqlite
-from deepagents import create_deep_agent
+from deepagents import SubAgent, create_deep_agent
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage
@@ -68,6 +68,11 @@ def build_system_prompt(staff_name: str, role: str = "staff") -> str:
     )
 
 
+def build_health_advisor_prompt() -> str:
+    template = (_PROMPTS_DIR / "health_advisor.md").read_text(encoding="utf-8")
+    return template.format(today=date.today().isoformat())
+
+
 async def _build_agent(staff_name: str, staff_id: int, role: str = "staff"):
     await init_checkpointer()
     model = init_chat_model(
@@ -75,9 +80,31 @@ async def _build_agent(staff_name: str, staff_id: int, role: str = "staff"):
         temperature=0.3,
         use_responses_api=False,  # PRD doesn't need Responses API features.
     )
+
+    # Specialist sub-agent for canine health questions. Has only read-only
+    # tools (query_db + web_search), its own strict safety guardrail, and
+    # is invoked by the main agent via the auto-injected `task` tool when
+    # the main agent decides to delegate.
+    all_tools = make_tools(staff_id)
+    health_tools = [t for t in all_tools if t.name in ("query_db", "web_search")]
+
+    health_advisor = SubAgent(
+        name="health_advisor",
+        description=(
+            "Canine health research specialist. Delegate any question about "
+            "a dog's symptoms, medication safety, dose/toxicity questions, "
+            "breed-specific risks, emergency signs, or general veterinary "
+            "topics to this agent. It has strict safety guardrails and "
+            "always defers dose/diagnosis/treatment to a vet."
+        ),
+        system_prompt=build_health_advisor_prompt(),
+        tools=health_tools,
+    )
+
     return create_deep_agent(
         model=model,
-        tools=make_tools(staff_id),
+        tools=all_tools,
+        subagents=[health_advisor],
         system_prompt=build_system_prompt(staff_name, role),
         checkpointer=_checkpointer,
     )
