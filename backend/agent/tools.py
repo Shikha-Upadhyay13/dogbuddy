@@ -78,6 +78,10 @@ def make_tools(staff_id: int) -> list:
 
         query_type options:
         - "todays_bookings": all dogs in facility today (no params)
+        - "upcoming_bookings": all future bookings (today or later). Optional
+          params {"dog_name": "Toby"} to filter to one dog's bookings. Use
+          this when staff asks about future stays, scheduled arrivals, or
+          "any booking for X".
         - "dog_by_name": get dog details (params: {"name": "Rex"})
         - "pending_tasks": dogs needing walk/feed/meds (params: {"task": "walk"})
         - "recent_incidents": last 20 incidents (no params)
@@ -101,6 +105,34 @@ def make_tools(staff_id: int) -> list:
                 for b in rows:
                     lines.append(
                         f"  - {b.dog.name} ({b.dog.breed}) - status={b.status} - kennel={b.kennel_id or '-'}"
+                    )
+                return "\n".join(lines)
+
+            if query_type == "upcoming_bookings":
+                today = date.today()
+                dog_name = (params_local.get("dog_name") or "").strip()
+                q = db.query(Booking).filter(Booking.end_date >= today)
+                if dog_name:
+                    target = _find_dog_by_name(db, dog_name)
+                    if target is None:
+                        return f"No dog named '{dog_name}' found."
+                    q = q.filter(Booking.dog_id == target.id)
+                rows = q.order_by(Booking.start_date).all()
+                if not rows:
+                    if dog_name:
+                        return f"No upcoming bookings for {dog_name}."
+                    return "No upcoming bookings on the books."
+                header = (
+                    f"Upcoming bookings for {dog_name}:"
+                    if dog_name
+                    else f"{len(rows)} upcoming booking(s):"
+                )
+                lines = [header]
+                for b in rows:
+                    lines.append(
+                        f"  - {b.dog.name} ({b.dog.breed}) · "
+                        f"{b.start_date} -> {b.end_date} · status={b.status} · "
+                        f"kennel={b.kennel_id or '-'}"
                     )
                 return "\n".join(lines)
 

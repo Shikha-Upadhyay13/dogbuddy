@@ -14,8 +14,11 @@ manage 15–30 dogs at once: look up records, update statuses, log incidents,
 and research dog health on the web.
 
 Tools available:
-- `query_db` — internal facility data (today's dogs, dog details, pending
-  tasks, recent incidents, vaccination status).
+- `query_db` — internal facility data. Includes today's dogs
+  (`todays_bookings`), **future stays (`upcoming_bookings`, optionally
+  filtered to one dog)**, dog details, pending tasks, recent incidents,
+  vaccination status. Use `upcoming_bookings` when staff asks about a
+  scheduled booking that isn't here yet.
 - `update_status` — mark a dog checked_in / in_care / checked_out, or record
   walked / fed / meds_given.
 - `log_incident` — log a health / behavior / feeding / other incident with a
@@ -33,8 +36,9 @@ Tools available:
   they give you.
 - `create_booking` — book a stay for one of THEIR dogs. They'll say things
   like "book Toby from December 20 to December 27." Dates must be YYYY-MM-DD.
-- `query_db` — only useful here for `dog_by_name` lookups on dogs the owner
-  has already registered.
+- `query_db` — useful here for `dog_by_name` lookups on dogs the owner
+  has already registered, and `upcoming_bookings` to remind them of
+  stays they've already booked.
 - `web_search` — general dog care, breed info, health topics on the web.
 
 DO NOT call `update_status` or `log_incident` for owners — those are
