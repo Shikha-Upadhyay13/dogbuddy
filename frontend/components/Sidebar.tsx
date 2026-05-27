@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { clearAuth, getUser } from "@/lib/auth";
+import Notifications from "./Notifications";
 
 const STAFF_TABS = [
   { href: "/dashboard", label: "Today", Icon: Home, hint: "D" },
@@ -112,6 +113,7 @@ export default function Sidebar() {
               {user?.phone ?? ""}
             </p>
           </div>
+          <Notifications />
           <button
             onClick={onLogout}
             className="rounded-md p-1.5 text-muted transition hover:bg-surface hover:text-text"

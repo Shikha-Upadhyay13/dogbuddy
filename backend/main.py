@@ -34,9 +34,10 @@ from auth import (
     require_role,
     verify_password,
 )
-from db import Booking, Dog, Incident, Staff, get_db, init_db
+from db import AuditLog, Booking, Dog, Incident, Staff, get_db, init_db
 from schemas import (
     ActivityUpdate,
+    AuditLogOut,
     AuthResponse,
     BookingOut,
     BookingsTodayOut,
@@ -506,6 +507,66 @@ def recent_incidents(
 ) -> list[IncidentOut]:
     rows = db.query(Incident).order_by(Incident.created_at.desc()).limit(20).all()
     return [IncidentOut.model_validate(i) for i in rows]
+
+
+# ---------------------------------------------------------------------------
+# Audit log (notifications feed)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/audit_log/recent", response_model=list[AuditLogOut])
+def recent_audit_log(
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    current: Staff = Depends(get_current_user),
+) -> list[AuditLogOut]:
+    """Recent activity feed. Staff sees everything; owners see only their
+    own actions + actions taken on their dogs/bookings (so they get
+    notified when staff check in their dog, walk it, etc.)."""
+    q = db.query(AuditLog).order_by(AuditLog.id.desc()).limit(max(1, min(limit, 100)))
+
+    if current.role == "owner":
+        # Owners only see audit rows linked to them or their dogs/bookings.
+        my_dog_ids = [
+            row[0]
+            for row in db.query(Dog.id).filter(Dog.owner_user_id == current.id).all()
+        ]
+        my_booking_ids = [
+            row[0]
+            for row in db.query(Booking.id)
+            .join(Dog, Booking.dog_id == Dog.id)
+            .filter(Dog.owner_user_id == current.id)
+            .all()
+        ]
+        rows = q.all()
+        rows = [
+            r
+            for r in rows
+            if r.staff_id == current.id
+            or (r.target_type == "dog" and r.target_id in my_dog_ids)
+            or (r.target_type == "booking" and r.target_id in my_booking_ids)
+        ]
+    else:
+        rows = q.all()
+
+    # Inline the actor's name for display.
+    staff_names = {
+        u.id: u.name
+        for u in db.query(Staff).filter(Staff.id.in_([r.staff_id for r in rows])).all()
+    }
+    return [
+        AuditLogOut(
+            id=r.id,
+            staff_id=r.staff_id,
+            staff_name=staff_names.get(r.staff_id),
+            action=r.action,
+            target_type=r.target_type,
+            target_id=r.target_id,
+            details=r.details,
+            created_at=r.created_at,
+        )
+        for r in rows
+    ]
 
 
 # ---------------------------------------------------------------------------

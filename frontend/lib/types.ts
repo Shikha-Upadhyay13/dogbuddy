@@ -73,3 +73,14 @@ export type BookingsToday = {
   in_care: TodayBookingItem[];
   checking_out: TodayBookingItem[];
 };
+
+export type AuditEntry = {
+  id: number;
+  staff_id: number;
+  staff_name: string | null;
+  action: string;
+  target_type: string;
+  target_id: number;
+  details: string | null;
+  created_at: string;
+};

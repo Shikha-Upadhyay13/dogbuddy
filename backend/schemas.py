@@ -127,6 +127,19 @@ class CreateBookingRequest(BaseModel):
     kennel_id: Optional[str] = None
 
 
+class AuditLogOut(BaseModel):
+    id: int
+    staff_id: int
+    staff_name: Optional[str] = None
+    action: str
+    target_type: str
+    target_id: int
+    details: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 # --- Dashboard / detail composites ---
 
 
