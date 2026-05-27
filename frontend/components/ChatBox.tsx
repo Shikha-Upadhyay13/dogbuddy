@@ -439,17 +439,32 @@ export default function ChatBox() {
               )}
             </button>
           )}
-          <div className="flex flex-1 items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 ring-accent/30 focus-within:border-accent focus-within:ring-2">
-            <input
-              type="text"
+          <div className="flex flex-1 items-end gap-2 rounded-md border border-border bg-surface px-3 py-2 ring-accent/30 focus-within:border-accent focus-within:ring-2">
+            <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                // Enter sends, Shift+Enter inserts a newline.
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  if (!sending && input.trim()) send(input);
+                }
+              }}
+              ref={(el) => {
+                if (!el) return;
+                el.style.height = "auto";
+                el.style.height = Math.min(el.scrollHeight, 160) + "px";
+              }}
+              rows={1}
               disabled={sending}
               placeholder={recording ? "Listening..." : "Message DogBuddy..."}
-              className="flex-1 bg-transparent text-sm text-text outline-none placeholder:text-muted disabled:opacity-50"
+              className="flex-1 resize-none bg-transparent text-sm leading-5 text-text outline-none placeholder:text-muted disabled:opacity-50"
             />
-            <kbd className="hidden rounded border border-border bg-bg/40 px-1.5 font-mono text-[10px] text-muted md:inline">
-              ⏎
+            <kbd
+              className="hidden whitespace-nowrap rounded border border-border bg-bg/40 px-1.5 font-mono text-[10px] text-muted md:inline"
+              title="Press Enter to send, Shift+Enter for a new line"
+            >
+              ⇧⏎ newline
             </kbd>
           </div>
           <button
