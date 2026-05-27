@@ -59,15 +59,16 @@ async def close_checkpointer() -> None:
     _checkpointer = None
 
 
-def build_system_prompt(staff_name: str) -> str:
+def build_system_prompt(staff_name: str, role: str = "staff") -> str:
     return _PROMPT_TEMPLATE.format(
         today=date.today().isoformat(),
         staff_name=staff_name,
+        role=role,
         incident_logging_skill=_INCIDENT_LOGGING,
     )
 
 
-async def _build_agent(staff_name: str, staff_id: int):
+async def _build_agent(staff_name: str, staff_id: int, role: str = "staff"):
     await init_checkpointer()
     model = init_chat_model(
         "openai:gpt-4o-mini",
@@ -77,7 +78,7 @@ async def _build_agent(staff_name: str, staff_id: int):
     return create_deep_agent(
         model=model,
         tools=make_tools(staff_id),
-        system_prompt=build_system_prompt(staff_name),
+        system_prompt=build_system_prompt(staff_name, role),
         checkpointer=_checkpointer,
     )
 
@@ -88,6 +89,7 @@ async def astream_chat(
     thread_id: str,
     staff_name: str,
     staff_id: int,
+    role: str = "staff",
 ) -> AsyncIterator[dict]:
     """Yield normalized event dicts the /chat endpoint translates into SSE.
 
@@ -98,7 +100,7 @@ async def astream_chat(
       {"type": "done"}
       {"type": "error", "detail": "..."}
     """
-    agent = await _build_agent(staff_name, staff_id)
+    agent = await _build_agent(staff_name, staff_id, role)
     config = {"configurable": {"thread_id": thread_id}}
     inputs = {"messages": [HumanMessage(content=message)]}
 

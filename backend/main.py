@@ -577,13 +577,14 @@ def recent_audit_log(
 @app.post("/chat")
 async def chat(
     body: ChatRequest,
-    current: Staff = Depends(get_current_staff),
+    current: Staff = Depends(get_current_user),
 ):
     # Import lazily so the auth path doesn't pay for langchain import at startup.
     from agent.graph import astream_chat
 
     staff_id = current.id
     staff_name = current.name
+    role = current.role
 
     async def event_stream():
         async for ev in astream_chat(
@@ -591,6 +592,7 @@ async def chat(
             thread_id=body.thread_id,
             staff_name=staff_name,
             staff_id=staff_id,
+            role=role,
         ):
             ev_type = ev.get("type", "message")
             payload = {k: v for k, v in ev.items() if k != "type"}
