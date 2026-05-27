@@ -186,22 +186,26 @@ export default function OwnerDashboardPage() {
             </section>
 
             {/* Chat call-to-action */}
-            <section className="rounded-xl border border-border bg-surface p-5">
+            <Link
+              href="/chat"
+              className="block rounded-xl border border-border bg-surface p-5 transition hover:border-accent/60"
+            >
               <div className="flex items-start gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent/10 text-accent">
                   <MessageSquare className="h-4 w-4" />
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-medium text-text">
-                    Need to ask something?
+                    Chat with DogBuddy
                   </p>
                   <p className="mt-0.5 text-xs text-muted">
-                    Chat with DogBuddy — questions about your booking, what to
-                    pack, general care advice. (Owner-mode chat coming soon.)
+                    Ask questions about your booking, register a new dog by
+                    chatting, or book a stay just by saying when you&apos;ll
+                    be away.
                   </p>
                 </div>
               </div>
-            </section>
+            </Link>
           </div>
         )}
       </main>

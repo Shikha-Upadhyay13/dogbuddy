@@ -8,12 +8,20 @@ import {
   MessageSquare,
   LogOut,
   Sparkles,
+  PawPrint,
+  CalendarDays,
 } from "lucide-react";
 
 import { clearAuth, getUser } from "@/lib/auth";
 
-const TABS = [
+const STAFF_TABS = [
   { href: "/dashboard", label: "Today", Icon: Home, hint: "D" },
+  { href: "/chat", label: "Chat", Icon: MessageSquare, hint: "C" },
+] as const;
+
+const OWNER_TABS = [
+  { href: "/owner/dashboard", label: "My dogs", Icon: PawPrint, hint: "D" },
+  { href: "/owner/book", label: "Book a stay", Icon: CalendarDays, hint: "B" },
   { href: "/chat", label: "Chat", Icon: MessageSquare, hint: "C" },
 ] as const;
 
@@ -21,6 +29,11 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const user = getUser();
+  const role = user?.role ?? "staff";
+  const tabs = role === "owner" ? OWNER_TABS : STAFF_TABS;
+  const home = role === "owner" ? "/owner/dashboard" : "/dashboard";
+  const sectionLabel = role === "owner" ? "Account" : "Workspace";
+  const roleBadge = role === "owner" ? "owner" : "staff";
 
   const onLogout = () => {
     clearAuth();
@@ -33,7 +46,7 @@ export default function Sidebar() {
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-border bg-bg/80 backdrop-blur md:flex">
       {/* Brand */}
       <Link
-        href="/dashboard"
+        href={home}
         className="flex items-center gap-2 border-b border-border px-5 py-4 text-text"
       >
         <span className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-surface text-accent">
@@ -41,16 +54,16 @@ export default function Sidebar() {
         </span>
         <span className="text-sm font-semibold tracking-tight">DogBuddy</span>
         <span className="ml-auto rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[10px] text-muted">
-          v1
+          {roleBadge}
         </span>
       </Link>
 
       {/* Nav */}
       <nav className="flex-1 space-y-0.5 px-3 py-4">
         <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
-          Workspace
+          {sectionLabel}
         </p>
-        {TABS.map(({ href, label, Icon, hint }) => {
+        {tabs.map(({ href, label, Icon, hint }) => {
           const active = pathname?.startsWith(href);
           return (
             <Link

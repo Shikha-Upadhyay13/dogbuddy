@@ -36,16 +36,17 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // Role guard: owner trying to hit staff-only routes, or vice versa.
+    // Role guard. /chat is open to both roles (the agent gates its tools
+    // by role server-side). Owner UI is /owner/*; staff UI is /dashboard
+    // and the modal-driven flows under it.
     if (loggedIn && user) {
-      const isOwnerRoute = pathname?.startsWith("/owner");
-      const isStaffRoute =
-        pathname?.startsWith("/dashboard") || pathname?.startsWith("/chat");
-      if (user.role === "staff" && isOwnerRoute) {
+      const isOwnerOnly = pathname?.startsWith("/owner");
+      const isStaffOnly = pathname?.startsWith("/dashboard");
+      if (user.role === "staff" && isOwnerOnly) {
         router.replace("/dashboard");
         return;
       }
-      if (user.role === "owner" && isStaffRoute) {
+      if (user.role === "owner" && isStaffOnly) {
         router.replace("/owner/dashboard");
         return;
       }
