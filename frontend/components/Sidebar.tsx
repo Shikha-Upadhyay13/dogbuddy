@@ -17,6 +17,7 @@ import {
   Plus,
   Trash2,
   Stethoscope,
+  AlertTriangle,
 } from "lucide-react";
 
 import { clearAuth, getUser } from "@/lib/auth";
@@ -33,6 +34,7 @@ import Notifications from "./Notifications";
 const STAFF_TABS = [
   { href: "/dashboard", label: "Today", Icon: Home, hint: "D" },
   { href: "/health", label: "Health", Icon: Stethoscope, hint: "H" },
+  { href: "/incidents", label: "Incidents", Icon: AlertTriangle, hint: "I" },
   { href: "/chat", label: "Chat", Icon: MessageSquare, hint: "C" },
 ] as const;
 
