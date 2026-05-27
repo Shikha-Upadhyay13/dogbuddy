@@ -149,14 +149,13 @@ export default function OwnerDashboardPage() {
                     {String(bookings?.length ?? 0).padStart(2, "0")}
                   </span>
                 </div>
-                <button
-                  disabled
-                  title="Coming next: book-a-stay form"
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1 text-xs text-muted opacity-60"
+                <Link
+                  href="/owner/book"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1 text-xs font-medium text-text transition hover:border-accent hover:text-accent"
                 >
                   <CalendarPlus className="h-3.5 w-3.5" />
                   Book a stay
-                </button>
+                </Link>
               </div>
 
               {bookings && bookings.length > 0 ? (
