@@ -23,7 +23,7 @@ export class ApiError extends Error {
 type ApiOptions = RequestInit & { skipAuth?: boolean };
 
 async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
-  const { skipAuth: _skipAuth = false, headers, ...rest } = options;
+  const { skipAuth = false, headers, ...rest } = options;
 
   const finalHeaders: Record<string, string> = {
     ...(headers as Record<string, string> | undefined),
