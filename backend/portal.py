@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -86,7 +86,7 @@ def get_account(current: Principal = Depends(get_current_user)) -> dict:
         "name": current.name,
         "phone": current.phone,
         "email": current.user.email,
-        "billing_state": None,
+        "billing_state": current.user.billing_state,
         "role": current.role,
         "facility_name": current.facility.name,
     }
@@ -105,6 +105,8 @@ def patch_account(
         user.name = str(body["name"]).strip()
     if "email" in body:
         user.email = (str(body["email"]).strip() or None) if body["email"] else None
+    if "billing_state" in body:
+        user.billing_state = (str(body.get("billing_state") or "").strip() or None)
     db.commit()
     return {"ok": True, "name": user.name, "email": user.email}
 
@@ -176,6 +178,10 @@ def get_facility(current: Principal = Depends(require_role("admin"))) -> dict:
         "nightly_rate_paise": facility.nightly_rate_paise,
         "whatsapp_enabled": facility.whatsapp_enabled,
         "email_enabled": facility.email_enabled,
+        "gstin": facility.gstin,
+        "gst_rate_bps": facility.gst_rate_bps,
+        "razorpay_key_id": facility.razorpay_key_id,
+        "razorpay_configured": bool(facility.razorpay_key_secret),
     }
 
 
@@ -209,6 +215,20 @@ def patch_facility(
     for field in ("require_vaccination", "whatsapp_enabled", "email_enabled"):
         if field in body:
             setattr(facility, field, bool(body[field]))
+    if "gstin" in body:
+        facility.gstin = (str(body.get("gstin") or "").strip() or None)
+    if body.get("gst_rate_bps") is not None:
+        facility.gst_rate_bps = int(body["gst_rate_bps"])
+    if "razorpay_key_id" in body:
+        facility.razorpay_key_id = (str(body.get("razorpay_key_id") or "").strip() or None)
+    from billing import encrypt_secret
+
+    if body.get("razorpay_key_secret"):
+        facility.razorpay_key_secret = encrypt_secret(str(body["razorpay_key_secret"]))
+    if body.get("razorpay_webhook_secret"):
+        facility.razorpay_webhook_secret = encrypt_secret(
+            str(body["razorpay_webhook_secret"])
+        )
     db.commit()
     return {"ok": True}
 
@@ -367,6 +387,157 @@ async def upload_photo(
         raise HTTPException(status_code=err.status_code, detail=err.detail) from err
     db.commit()
     return {"id": log.id, "photo_url": signed_path(key)}
+
+
+def _invoice_or_404(db: Session, invoice_id: int, facility_id: int):
+    from db import Invoice
+
+    invoice = db.get(Invoice, invoice_id)
+    if invoice is None or invoice.facility_id != facility_id:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return invoice
+
+
+@router.get("/invoices")
+def list_invoices(
+    db: Session = Depends(get_db),
+    current: Principal = Depends(get_current_staff),
+) -> list[dict]:
+    from billing import invoice_out
+    from db import Invoice
+
+    rows = (
+        db.query(Invoice)
+        .filter(Invoice.facility_id == current.facility_id)
+        .order_by(Invoice.id.desc())
+        .all()
+    )
+    return [invoice_out(row) for row in rows]
+
+
+@router.get("/invoices/mine")
+def my_invoices(
+    db: Session = Depends(get_db),
+    current: Principal = Depends(require_role("parent")),
+) -> list[dict]:
+    from billing import invoice_out
+    from db import Dog, Invoice
+
+    rows = (
+        db.query(Invoice)
+        .join(Booking, Invoice.booking_id == Booking.id)
+        .join(Dog, Booking.dog_id == Dog.id)
+        .filter(
+            Invoice.facility_id == current.facility_id,
+            Dog.owner_user_id == current.id,
+        )
+        .order_by(Invoice.id.desc())
+        .all()
+    )
+    return [invoice_out(row) for row in rows]
+
+
+@router.post("/invoices/{invoice_id}/payments", status_code=201)
+def pay_invoice(
+    invoice_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    current: Principal = Depends(require_role("admin")),
+) -> dict:
+    from billing import BillingError, record_payment
+
+    invoice = _invoice_or_404(db, invoice_id, current.facility_id)
+    method = str(body.get("method") or "")
+    if method not in ("cash", "upi"):
+        raise HTTPException(status_code=422, detail="Record cash or UPI here")
+    try:
+        payment = record_payment(
+            db,
+            facility=current.facility,
+            invoice=invoice,
+            amount_paise=int(body.get("amount_paise") or 0),
+            method=method,
+            actor_id=current.id,
+        )
+    except BillingError as err:
+        raise HTTPException(status_code=err.status_code, detail=err.detail) from err
+    db.commit()
+    return {"id": payment.id, "status": payment.status}
+
+
+@router.post("/invoices/{invoice_id}/credit-notes", status_code=201)
+def credit_invoice(
+    invoice_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    current: Principal = Depends(require_role("admin")),
+) -> dict:
+    from billing import BillingError, invoice_out, issue_credit_note
+
+    invoice = _invoice_or_404(db, invoice_id, current.facility_id)
+    try:
+        note = issue_credit_note(
+            db,
+            current.facility,
+            invoice,
+            current.id,
+            str(body.get("reason") or "correction"),
+        )
+    except BillingError as err:
+        raise HTTPException(status_code=err.status_code, detail=err.detail) from err
+    original_total = invoice.total_paise
+    db.commit()
+    db.refresh(invoice)
+    if invoice.total_paise != original_total:
+        raise HTTPException(status_code=500, detail="Issued invoice was modified")
+    return invoice_out(note)
+
+
+@router.post("/payments/{payment_id}/refund", status_code=201)
+def refund(
+    payment_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    current: Principal = Depends(require_role("admin")),
+) -> dict:
+    from billing import BillingError, refund_payment
+    from db import Payment
+
+    payment = db.get(Payment, payment_id)
+    if payment is None or payment.facility_id != current.facility_id:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    try:
+        entry = refund_payment(
+            db,
+            current.facility,
+            payment,
+            current.id,
+            int(body.get("amount_paise") or payment.amount_paise),
+        )
+    except BillingError as err:
+        raise HTTPException(status_code=err.status_code, detail=err.detail) from err
+    db.commit()
+    return {"id": entry.id, "amount_paise": entry.amount_paise}
+
+
+@router.post("/webhooks/razorpay/{facility_id}")
+async def razorpay_webhook(
+    facility_id: int, request: Request, db: Session = Depends(get_db)
+) -> dict:
+    from billing import BillingError, handle_webhook
+
+    body = await request.body()
+    try:
+        result = handle_webhook(
+            db,
+            facility_id,
+            body,
+            request.headers.get("x-razorpay-signature", ""),
+        )
+    except BillingError as err:
+        raise HTTPException(status_code=err.status_code, detail=err.detail) from err
+    db.commit()
+    return result
 
 
 @router.get("/media/{token}")

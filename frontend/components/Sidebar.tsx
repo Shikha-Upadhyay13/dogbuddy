@@ -43,6 +43,7 @@ const STAFF_TABS = [
   { href: "/health", label: "Health", Icon: Stethoscope, hint: "H" },
   { href: "/incidents", label: "Incidents", Icon: AlertTriangle, hint: "I" },
   { href: "/owners", label: "Owners", Icon: Users, hint: "O" },
+  { href: "/invoices", label: "Invoices", Icon: Inbox, hint: "V" },
   { href: "/chat", label: "Chat", Icon: MessageSquare, hint: "C" },
 ] as const;
 

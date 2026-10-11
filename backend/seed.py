@@ -56,6 +56,8 @@ def seed_facility(session) -> tuple[Facility, User]:
         waiver_text="I confirm the facility may board my dog and contact the vet in an emergency.",
         waiver_version=1,
         nightly_rate_paise=150000,
+        gstin="29ABCDE1234F1Z5",
+        gst_rate_bps=1800,
     )
     session.add(facility)
     session.flush()

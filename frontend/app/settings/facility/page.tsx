@@ -18,11 +18,16 @@ type FacilitySettings = {
   whatsapp_enabled: boolean;
   email_enabled: boolean;
   nightly_rate_paise: number;
+  gstin: string | null;
+  gst_rate_bps: number;
+  razorpay_key_id: string | null;
 };
 
 export default function FacilitySettingsPage() {
   const [form, setForm] = useState<FacilitySettings | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [keySecret, setKeySecret] = useState("");
+  const [webhookSecret, setWebhookSecret] = useState("");
 
   useEffect(() => {
     api
@@ -37,7 +42,11 @@ export default function FacilitySettingsPage() {
     e.preventDefault();
     if (!form) return;
     try {
-      await api.patch("/settings/facility", form);
+      await api.patch("/settings/facility", {
+        ...form,
+        ...(keySecret ? { razorpay_key_secret: keySecret } : {}),
+        ...(webhookSecret ? { razorpay_webhook_secret: webhookSecret } : {}),
+      });
       setMessage("Saved");
     } catch (err) {
       setMessage(err instanceof ApiError ? err.detail : "Could not save");
@@ -92,6 +101,32 @@ export default function FacilitySettingsPage() {
               />
               Email
             </label>
+            <input
+              value={form.gstin ?? ""}
+              onChange={(e) => setForm({ ...form, gstin: e.target.value })}
+              className="w-full rounded-md border border-border bg-surface px-3 py-2"
+              placeholder="GSTIN"
+            />
+            <input
+              value={form.razorpay_key_id ?? ""}
+              onChange={(e) => setForm({ ...form, razorpay_key_id: e.target.value })}
+              className="w-full rounded-md border border-border bg-surface px-3 py-2"
+              placeholder="Razorpay key id"
+            />
+            <input
+              type="password"
+              value={keySecret}
+              onChange={(e) => setKeySecret(e.target.value)}
+              className="w-full rounded-md border border-border bg-surface px-3 py-2"
+              placeholder="Razorpay key secret"
+            />
+            <input
+              type="password"
+              value={webhookSecret}
+              onChange={(e) => setWebhookSecret(e.target.value)}
+              className="w-full rounded-md border border-border bg-surface px-3 py-2"
+              placeholder="Razorpay webhook secret"
+            />
             <textarea
               value={form.waiver_text}
               onChange={(e) => setForm({ ...form, waiver_text: e.target.value })}

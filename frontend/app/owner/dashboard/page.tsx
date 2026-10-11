@@ -29,6 +29,9 @@ export default function OwnerDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [cards, setCards] = useState<Record<number, string>>({});
   const [arrived, setArrived] = useState<number | null>(null);
+  const [invoices, setInvoices] = useState<
+    { id: number; number: string; kind: string; total_paise: number; payment_link: string | null; pdf_url: string | null }[]
+  >([]);
 
   useEffect(() => {
     (async () => {
@@ -53,6 +56,10 @@ export default function OwnerDashboardPage() {
           }),
         );
         setCards(Object.fromEntries(previews));
+        const mine = await api.get<
+          { id: number; number: string; kind: string; total_paise: number; payment_link: string | null; pdf_url: string | null }[]
+        >("/invoices/mine");
+        setInvoices(mine);
       } catch (err) {
         setError(err instanceof ApiError ? err.detail : "Failed to load");
       } finally {
@@ -253,6 +260,35 @@ export default function OwnerDashboardPage() {
                         {cards[b.id] || "No update yet today."}
                       </li>
                     ))}
+                </ul>
+              </section>
+            )}
+
+            {invoices.length > 0 && (
+              <section>
+                <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+                  Invoices
+                </h2>
+                <ul className="overflow-hidden rounded-lg border border-border bg-bg">
+                  {invoices.map((row) => (
+                    <li
+                      key={row.id}
+                      className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 text-sm last:border-0"
+                    >
+                      <span>
+                        {row.number}{" "}
+                        <span className="text-muted">{row.kind}</span>
+                      </span>
+                      <span className="font-mono">
+                        ₹{(row.total_paise / 100).toFixed(2)}
+                      </span>
+                      {row.payment_link && (
+                        <a className="text-accent" href={row.payment_link}>
+                          Pay deposit
+                        </a>
+                      )}
+                    </li>
+                  ))}
                 </ul>
               </section>
             )}

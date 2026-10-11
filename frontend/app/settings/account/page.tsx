@@ -13,15 +13,19 @@ export default function AccountSettingsPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [billingState, setBillingState] = useState("");
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     api
-      .get<{ name: string; email: string | null; phone: string }>("/settings/account")
+      .get<{ name: string; email: string | null; phone: string; billing_state: string | null }>(
+        "/settings/account",
+      )
       .then((row) => {
         setName(row.name);
         setEmail(row.email ?? "");
         setPhone(row.phone);
+        setBillingState(row.billing_state ?? "");
       })
       .catch(() => setMessage("Could not load account"));
   }, []);
@@ -29,7 +33,7 @@ export default function AccountSettingsPage() {
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.patch("/settings/account", { name, email });
+      await api.patch("/settings/account", { name, email, billing_state: billingState });
       setMessage("Saved");
     } catch (err) {
       setMessage(err instanceof ApiError ? err.detail : "Could not save");
@@ -66,6 +70,12 @@ export default function AccountSettingsPage() {
             placeholder="Email"
           />
           <p className="font-mono text-sm text-muted">{phone}</p>
+          <input
+            value={billingState}
+            onChange={(e) => setBillingState(e.target.value)}
+            className="w-full rounded-md border border-border bg-surface px-3 py-2"
+            placeholder="Billing state"
+          />
           <button className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-bg">
             Save
           </button>

@@ -68,6 +68,7 @@ class User(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     phone: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     email: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    billing_state: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
 
@@ -100,6 +101,12 @@ class Facility(Base):
     nightly_rate_paise: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     whatsapp_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     email_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    gstin: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    gst_rate_bps: Mapped[int] = mapped_column(Integer, nullable=False, default=1800)
+    razorpay_key_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    razorpay_key_secret: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    razorpay_webhook_secret: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    next_invoice_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
 
     memberships: Mapped[list["Membership"]] = relationship(back_populates="facility")
@@ -193,6 +200,14 @@ class Booking(Base):
         ForeignKey("users.id"), nullable=True
     )
     vaccination_override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    quote_saved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    quote_nights: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    quote_nightly_paise: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    quote_addons_paise: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    quote_subtotal_paise: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    quote_tax_paise: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    quote_total_paise: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    selected_addon_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     last_walked_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     last_fed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     last_meds_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
@@ -340,6 +355,68 @@ class ReportCard(Base):
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
+
+
+class Invoice(Base):
+    """Issued invoices are immutable. A correction is a new credit-note row."""
+
+    __tablename__ = "invoices"
+    __table_args__ = (
+        UniqueConstraint("facility_id", "number", name="uq_invoice_facility_number"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    booking_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bookings.id"), nullable=True
+    )
+    original_invoice_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("invoices.id"), nullable=True
+    )
+    number: Mapped[str] = mapped_column(String, nullable=False)
+    kind: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="issued")
+    subtotal_paise: Mapped[int] = mapped_column(Integer, nullable=False)
+    cgst_paise: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sgst_paise: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    igst_paise: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_paise: Mapped[int] = mapped_column(Integer, nullable=False)
+    place_of_supply: Mapped[str] = mapped_column(String, nullable=False)
+    customer_state: Mapped[str] = mapped_column(String, nullable=False)
+    pdf_key: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    payment_link: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    issued_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    invoice_id: Mapped[int] = mapped_column(ForeignKey("invoices.id"), nullable=False)
+    amount_paise: Mapped[int] = mapped_column(Integer, nullable=False)
+    method: Mapped[str] = mapped_column(String, nullable=False)
+    razorpay_payment_id: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True, unique=True
+    )
+    status: Mapped[str] = mapped_column(String, nullable=False, default="captured")
+    recorded_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
+
+
+class LedgerEntry(Base):
+    __tablename__ = "ledger_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    payment_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("payments.id"), nullable=True
+    )
+    invoice_id: Mapped[int] = mapped_column(ForeignKey("invoices.id"), nullable=False)
+    kind: Mapped[str] = mapped_column(String, nullable=False)
+    amount_paise: Mapped[int] = mapped_column(Integer, nullable=False)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
 
 

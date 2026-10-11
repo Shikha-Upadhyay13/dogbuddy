@@ -171,6 +171,9 @@ def create_request(
             "override": override,
         },
     )
+    from billing import sync_booking_money
+
+    sync_booking_money(db, facility, booking, actor_id)
     return booking
 
 
@@ -200,6 +203,9 @@ def decide(
         target_id=booking.id,
         details={"before": before, "after": booking.status, "decision": action},
     )
+    from billing import sync_booking_money
+
+    sync_booking_money(db, facility, booking, actor_id)
     return booking
 
 
@@ -364,6 +370,9 @@ def check_out(
         target_id=booking.id,
         details={"before": before, "after": "checked_out", "dog_id": booking.dog_id},
     )
+    from billing import sync_booking_money
+
+    sync_booking_money(db, facility, booking, actor_id)
     return booking
 
 
