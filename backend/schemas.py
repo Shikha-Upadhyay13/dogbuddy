@@ -14,25 +14,68 @@ class SignupRequest(BaseModel):
     name: str = Field(min_length=1)
     phone: str = Field(min_length=1)
     password: str = Field(min_length=6)
+    facility_slug: str = Field(min_length=1)
 
 
 class LoginRequest(BaseModel):
     phone: str
     password: str
+    facility_slug: Optional[str] = None
 
 
-class StaffOut(BaseModel):
+class PasswordResetRequest(BaseModel):
+    phone: str
+
+
+class PasswordResetConfirm(BaseModel):
+    phone: str
+    code: str = Field(min_length=4)
+    password: str = Field(min_length=6)
+
+
+class InviteRequest(BaseModel):
+    name: str = Field(min_length=1)
+    phone: str = Field(min_length=1)
+    role: str = "attendant"
+
+
+class AcceptInviteRequest(BaseModel):
+    phone: str
+    code: str = Field(min_length=4)
+    password: str = Field(min_length=6)
+    facility_slug: str
+
+
+class SessionUser(BaseModel):
     id: int
     name: str
     phone: str
-    role: str = "staff"
+    email: Optional[str] = None
+    role: str
+    facility_id: int
+    facility_name: str
+    facility_slug: str
 
-    model_config = {"from_attributes": True}
+
+class FacilityChoice(BaseModel):
+    facility_id: int
+    facility_name: str
+    facility_slug: str
+    role: str
 
 
 class AuthResponse(BaseModel):
-    token: str
-    staff: StaffOut
+    user: Optional[SessionUser] = None
+    needs_facility: bool = False
+    memberships: list[FacilityChoice] = []
+    debug_code: Optional[str] = None
+
+
+class InviteResponse(BaseModel):
+    phone: str
+    role: str
+    facility_slug: str
+    code: str
 
 
 # --- Dogs / bookings / incidents (for Phase 2) ---

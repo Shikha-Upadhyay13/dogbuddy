@@ -59,11 +59,14 @@ async def close_checkpointer() -> None:
     _checkpointer = None
 
 
-def build_system_prompt(staff_name: str, role: str = "staff") -> str:
+def build_system_prompt(
+    staff_name: str, role: str = "attendant", facility_name: str = "this facility"
+) -> str:
     return _PROMPT_TEMPLATE.format(
         today=date.today().isoformat(),
         staff_name=staff_name,
         role=role,
+        facility_name=facility_name,
         incident_logging_skill=_INCIDENT_LOGGING,
     )
 
@@ -73,7 +76,13 @@ def build_health_advisor_prompt() -> str:
     return template.format(today=date.today().isoformat())
 
 
-async def _build_agent(staff_name: str, staff_id: int, role: str = "staff"):
+async def _build_agent(
+    staff_name: str,
+    staff_id: int,
+    role: str = "attendant",
+    facility_id: int = 0,
+    facility_name: str = "this facility",
+):
     await init_checkpointer()
     model = init_chat_model(
         "openai:gpt-4o-mini",
@@ -85,7 +94,7 @@ async def _build_agent(staff_name: str, staff_id: int, role: str = "staff"):
     # tools (query_db + web_search), its own strict safety guardrail, and
     # is invoked by the main agent via the auto-injected `task` tool when
     # the main agent decides to delegate.
-    all_tools = make_tools(staff_id)
+    all_tools = make_tools(staff_id, facility_id, role)
     health_tools = [t for t in all_tools if t.name in ("query_db", "web_search")]
 
     health_advisor = SubAgent(
@@ -105,7 +114,7 @@ async def _build_agent(staff_name: str, staff_id: int, role: str = "staff"):
         model=model,
         tools=all_tools,
         subagents=[health_advisor],
-        system_prompt=build_system_prompt(staff_name, role),
+        system_prompt=build_system_prompt(staff_name, role, facility_name),
         checkpointer=_checkpointer,
     )
 
@@ -116,7 +125,9 @@ async def astream_chat(
     thread_id: str,
     staff_name: str,
     staff_id: int,
-    role: str = "staff",
+    role: str = "attendant",
+    facility_id: int = 0,
+    facility_name: str = "this facility",
 ) -> AsyncIterator[dict]:
     """Yield normalized event dicts the /chat endpoint translates into SSE.
 
@@ -127,7 +138,9 @@ async def astream_chat(
       {"type": "done"}
       {"type": "error", "detail": "..."}
     """
-    agent = await _build_agent(staff_name, staff_id, role)
+    agent = await _build_agent(
+        staff_name, staff_id, role, facility_id, facility_name
+    )
     config = {"configurable": {"thread_id": thread_id}}
     inputs = {"messages": [HumanMessage(content=message)]}
 

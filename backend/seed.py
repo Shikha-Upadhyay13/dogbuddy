@@ -1,10 +1,9 @@
-"""Populate the SQLite DB with the exact mock data from PRD Section 5.
+"""Populate the database with a demo facility.
 
 Usage:
     python seed.py
 
-Idempotent: drops + recreates all tables on each run so the data stays
-exactly as the PRD specifies.
+Idempotent: drops + recreates all tables on each run.
 """
 
 from __future__ import annotations
@@ -17,9 +16,11 @@ from db import (
     Base,
     Booking,
     Dog,
+    Facility,
     Incident,
+    Membership,
     SessionLocal,
-    Staff,
+    User,
     engine,
 )
 
@@ -36,16 +37,29 @@ def reset_schema() -> None:
     Base.metadata.create_all(bind=engine)
 
 
-def seed_staff(session):
-    staff = Staff(
+def seed_facility(session) -> tuple[Facility, User]:
+    facility = Facility(
+        name="DogBuddy Boarding",
+        slug="demo",
+        address="12 Kennel Lane, Bengaluru",
+        state="Karnataka",
+        phone="08040001234",
+        timezone="Asia/Kolkata",
+    )
+    session.add(facility)
+    session.flush()
+    admin = User(
         name="Anand",
         phone="9999900001",
         password_hash=_hash("dogbuddy123"),
-        role="staff",
     )
-    session.add(staff)
+    session.add(admin)
     session.flush()
-    return staff
+    session.add(
+        Membership(user_id=admin.id, facility_id=facility.id, role="admin")
+    )
+    session.flush()
+    return facility, admin
 
 
 # PRD Section 5: exact 8-dog roster.
@@ -175,7 +189,7 @@ DOGS_SPEC = [
 ]
 
 
-def seed_dogs_and_bookings(session):
+def seed_dogs_and_bookings(session, facility_id: int):
     dogs_by_name: dict[str, Dog] = {}
     kennel_counter = 1
 
@@ -195,6 +209,7 @@ def seed_dogs_and_bookings(session):
         vacc_offset,
     ) in DOGS_SPEC:
         dog = Dog(
+            facility_id=facility_id,
             name=name,
             breed=breed,
             age_years=age,
@@ -248,6 +263,7 @@ def seed_dogs_and_bookings(session):
             last_meds = None
 
         booking = Booking(
+            facility_id=facility_id,
             dog_id=dog.id,
             start_date=start,
             end_date=end,
@@ -264,9 +280,10 @@ def seed_dogs_and_bookings(session):
     return dogs_by_name
 
 
-def seed_incidents(session, dogs_by_name, staff_id: int):
+def seed_incidents(session, dogs_by_name, staff_id: int, facility_id: int):
     incidents = [
         Incident(
+            facility_id=facility_id,
             dog_id=dogs_by_name["Charlie"].id,
             staff_id=staff_id,
             type="health",
@@ -275,6 +292,7 @@ def seed_incidents(session, dogs_by_name, staff_id: int):
             created_at=NOW - timedelta(hours=2),
         ),
         Incident(
+            facility_id=facility_id,
             dog_id=dogs_by_name["Bella"].id,
             staff_id=staff_id,
             type="behavior",
@@ -283,6 +301,7 @@ def seed_incidents(session, dogs_by_name, staff_id: int):
             created_at=NOW - timedelta(days=1),
         ),
         Incident(
+            facility_id=facility_id,
             dog_id=dogs_by_name["Max"].id,
             staff_id=staff_id,
             type="health",
@@ -300,14 +319,14 @@ def main() -> None:
 
     session = SessionLocal()
     try:
-        print("-> Seeding staff...")
-        staff = seed_staff(session)
+        print("-> Seeding facility + admin...")
+        facility, staff = seed_facility(session)
 
         print("-> Seeding dogs + bookings...")
-        dogs_by_name = seed_dogs_and_bookings(session)
+        dogs_by_name = seed_dogs_and_bookings(session, facility.id)
 
         print("-> Seeding incidents...")
-        seed_incidents(session, dogs_by_name, staff.id)
+        seed_incidents(session, dogs_by_name, staff.id, facility.id)
 
         session.commit()
 
@@ -318,9 +337,10 @@ def main() -> None:
         n_bookings = session.scalar(select(func.count()).select_from(Booking))
         n_incidents = session.scalar(select(func.count()).select_from(Incident))
         print(
-            f"OK Seed complete: 1 staff, {n_dogs} dogs, {n_bookings} bookings, {n_incidents} incidents"
+            f"OK Seed complete: facility '{facility.slug}', 1 admin, "
+            f"{n_dogs} dogs, {n_bookings} bookings, {n_incidents} incidents"
         )
-        print("   Login -> phone: 9999900001  password: dogbuddy123")
+        print("   Login -> facility: demo  phone: 9999900001  password: dogbuddy123")
     finally:
         session.close()
 

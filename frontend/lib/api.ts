@@ -1,9 +1,14 @@
 // Native fetch wrapper that attaches the JWT and parses JSON.
 // Throws ApiError on non-2xx so callers can inline-handle it.
 
-import { getToken, clearAuth } from "./auth";
+import { clearAuth } from "./auth";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Empty NEXT_PUBLIC_API_URL uses the Next.js `/backend` proxy so the
+// session cookie stays on the same origin as the UI.
+const BASE =
+  process.env.NEXT_PUBLIC_API_URL && process.env.NEXT_PUBLIC_API_URL.length > 0
+    ? process.env.NEXT_PUBLIC_API_URL
+    : "/backend";
 
 export class ApiError extends Error {
   status: number;
@@ -18,18 +23,21 @@ export class ApiError extends Error {
 type ApiOptions = RequestInit & { skipAuth?: boolean };
 
 async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
-  const { skipAuth = false, headers, ...rest } = options;
+  const { skipAuth: _skipAuth = false, headers, ...rest } = options;
 
   const finalHeaders: Record<string, string> = {
-    "Content-Type": "application/json",
     ...(headers as Record<string, string> | undefined),
   };
-  if (!skipAuth) {
-    const token = getToken();
-    if (token) finalHeaders.Authorization = `Bearer ${token}`;
+  if (rest.body != null && !(rest.body instanceof FormData)) {
+    finalHeaders["Content-Type"] =
+      finalHeaders["Content-Type"] || "application/json";
   }
 
-  const res = await fetch(`${BASE}${path}`, { ...rest, headers: finalHeaders });
+  const res = await fetch(`${BASE}${path}`, {
+    ...rest,
+    headers: finalHeaders,
+    credentials: "include",
+  });
 
   if (res.status === 204) {
     return undefined as T;

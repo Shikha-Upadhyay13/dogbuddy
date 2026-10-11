@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: dogbuddy
+      POSTGRES_PASSWORD: dogbuddy
+      POSTGRES_DB: dogbuddy
+    ports:
+      - "5432:5432"
+    volumes:
+      - dogbuddy_pg:/var/lib/postgresql/data
+
+volumes:
+  dogbuddy_pg:

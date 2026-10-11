@@ -2,17 +2,21 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getUser, isLoggedIn } from "@/lib/auth";
+
+import { api } from "@/lib/api";
+import { homeForRole, saveUser } from "@/lib/auth";
+import type { SessionUser } from "@/lib/types";
 
 export default function HomePage() {
   const router = useRouter();
   useEffect(() => {
-    if (!isLoggedIn()) {
-      router.replace("/login");
-      return;
-    }
-    const user = getUser();
-    router.replace(user?.role === "staff" ? "/dashboard" : "/owner/dashboard");
+    api
+      .get<SessionUser>("/auth/me")
+      .then((me) => {
+        saveUser(me);
+        router.replace(homeForRole(me.role));
+      })
+      .catch(() => router.replace("/login"));
   }, [router]);
 
   return (

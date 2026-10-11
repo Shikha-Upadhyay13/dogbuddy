@@ -15,7 +15,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { API_BASE } from "@/lib/api";
-import { getToken, getUser } from "@/lib/auth";
+import { getUser } from "@/lib/auth";
 import {
   cacheKeyForThread,
   notifyChatsChanged,
@@ -184,15 +184,13 @@ export default function ChatBox() {
 
       const controller = new AbortController();
       abortRef.current = controller;
-      const token = getToken();
-
       try {
         const res = await fetch(`${API_BASE}/chat`, {
           method: "POST",
+          credentials: "include",
           headers: {
             "Content-Type": "application/json",
             Accept: "text/event-stream",
-            Authorization: token ? `Bearer ${token}` : "",
           },
           body: JSON.stringify({
             message: trimmed,

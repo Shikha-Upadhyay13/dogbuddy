@@ -21,7 +21,8 @@ import {
   Users,
 } from "lucide-react";
 
-import { clearAuth, getUser } from "@/lib/auth";
+import { api } from "@/lib/api";
+import { clearAuth, getUser, homeForRole, isStaffRole } from "@/lib/auth";
 import {
   CHATS_CHANGED_EVENT,
   cacheKeyForThread,
@@ -51,11 +52,12 @@ export default function Sidebar() {
   const router = useRouter();
   const search = useSearchParams();
   const [user] = useState(() => getUser());
-  const role = user?.role ?? "staff";
-  const tabs = role === "owner" ? OWNER_TABS : STAFF_TABS;
-  const home = role === "owner" ? "/owner/dashboard" : "/dashboard";
-  const sectionLabel = role === "owner" ? "Account" : "Workspace";
-  const roleBadge = role === "owner" ? "owner" : "staff";
+  const role = user?.role ?? "attendant";
+  const staff = isStaffRole(role);
+  const tabs = staff ? STAFF_TABS : OWNER_TABS;
+  const home = homeForRole(role);
+  const sectionLabel = staff ? "Workspace" : "Account";
+  const roleBadge = role;
 
   const onChat = pathname?.startsWith("/chat");
   const activeThread = search?.get("thread") ?? "";
@@ -99,8 +101,10 @@ export default function Sidebar() {
   };
 
   const onLogout = () => {
-    clearAuth();
-    router.replace("/login");
+    void api.post("/auth/logout", {}).catch(() => undefined).finally(() => {
+      clearAuth();
+      router.replace("/login");
+    });
   };
 
   const initial = user?.name?.[0]?.toUpperCase() ?? "?";

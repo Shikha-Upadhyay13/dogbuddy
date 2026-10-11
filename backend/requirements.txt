@@ -6,6 +6,11 @@ sse-starlette>=2.1.0
 # --- Data ---
 SQLAlchemy>=2.0.30
 pydantic>=2.8.0
+alembic>=1.13.0
+psycopg[binary]>=3.2.0
+
+# --- Tests ---
+pytest>=8.0.0
 
 # --- Auth ---
 python-jose[cryptography]>=3.3.0

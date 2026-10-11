@@ -1,31 +1,64 @@
-"""JWT auth + bcrypt password hashing + FastAPI dependencies.
+"""Cookie sessions, bcrypt passwords, and membership-scoped roles.
 
-We use the `bcrypt` library directly (passlib is unmaintained and warns
-on bcrypt >=4.1.0).
+The session JWT lives in an httpOnly cookie. A Bearer token is accepted as
+well so tests and scripts can call the API without a browser.
 """
 
 from __future__ import annotations
 
+import hashlib
 import os
+import secrets
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
 from dotenv import load_dotenv
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
-from db import Staff, get_db
+from db import Facility, Membership, OneTimeCode, User, get_db
 
 load_dotenv()
 
 JWT_SECRET = os.getenv("JWT_SECRET", "change-me-in-prod")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRES_MINUTES = int(os.getenv("JWT_EXPIRES_MINUTES", "1440"))
+COOKIE_NAME = "dogbuddy_session"
+STAFF_ROLES = ("admin", "attendant")
+PARENT_ROLE = "parent"
+ROLES = STAFF_ROLES + (PARENT_ROLE,)
 
-# tokenUrl is informational; the frontend posts to /auth/login directly.
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
+
+
+@dataclass
+class Principal:
+    user: User
+    membership: Membership
+    facility: Facility
+
+    @property
+    def id(self) -> int:
+        return self.user.id
+
+    @property
+    def role(self) -> str:
+        return self.membership.role
+
+    @property
+    def name(self) -> str:
+        return self.user.name
+
+    @property
+    def phone(self) -> str:
+        return self.user.phone
+
+    @property
+    def facility_id(self) -> int:
+        return self.facility.id
 
 
 def hash_password(password: str) -> str:
@@ -39,55 +72,96 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-def create_access_token(staff_id: int) -> str:
+def hash_code(code: str) -> str:
+    return hashlib.sha256(code.encode("utf-8")).hexdigest()
+
+
+def new_otp() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def create_access_token(user_id: int, facility_id: int, role: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRES_MINUTES)
-    payload = {"sub": str(staff_id), "exp": expire}
+    payload = {
+        "sub": str(user_id),
+        "facility_id": facility_id,
+        "role": role,
+        "exp": expire,
+    }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
-def decode_token(token: str) -> int:
-    """Returns staff_id. Raises HTTPException on invalid/expired token."""
+def decode_token(token: str) -> dict:
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        sub = payload.get("sub")
-        if sub is None:
-            raise JWTError("missing sub")
-        return int(sub)
+        if payload.get("sub") is None or payload.get("facility_id") is None:
+            raise JWTError("missing claims")
+        return payload
     except (JWTError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+def cookie_params() -> dict:
+    secure = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+    samesite = os.getenv("COOKIE_SAMESITE", "lax")
+    return {
+        "httponly": True,
+        "secure": secure,
+        "samesite": samesite,
+        "path": "/",
+        "max_age": JWT_EXPIRES_MINUTES * 60,
+    }
+
+
+def set_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(COOKIE_NAME, token, **cookie_params())
+
+
+def clear_session_cookie(response: Response) -> None:
+    response.delete_cookie(COOKIE_NAME, path="/")
 
 
 def get_current_user(
+    request: Request,
     token: str | None = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
-) -> Staff:
-    """Resolve the JWT into a Staff row (which now represents any user --
-    staff OR owner -- distinguished by the `role` column)."""
-    if not token:
+) -> Principal:
+    raw = token or request.cookies.get(COOKIE_NAME)
+    if not raw:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
-            headers={"WWW-Authenticate": "Bearer"},
         )
-    user_id = decode_token(token)
-    user = db.get(Staff, user_id)
-    if user is None:
+    payload = decode_token(raw)
+    user = db.get(User, int(payload["sub"]))
+    facility = db.get(Facility, int(payload["facility_id"]))
+    if user is None or facility is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
+        )
+    membership = (
+        db.query(Membership)
+        .filter(
+            Membership.user_id == user.id,
+            Membership.facility_id == facility.id,
+        )
+        .one_or_none()
+    )
+    if membership is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
+            detail="No membership for this facility",
         )
-    return user
+    return Principal(user=user, membership=membership, facility=facility)
 
 
 def require_role(*allowed_roles: str):
-    """FastAPI dependency factory: only lets users with one of the listed
-    roles through. Usage: `current = Depends(require_role('staff'))`."""
+    """Only memberships with one of these roles pass."""
 
-    def _dep(current: Staff = Depends(get_current_user)) -> Staff:
+    def _dep(current: Principal = Depends(get_current_user)) -> Principal:
         if current.role not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -98,9 +172,54 @@ def require_role(*allowed_roles: str):
     return _dep
 
 
-# Backwards-compat alias: every endpoint that used get_current_staff still
-# works, but now also implicitly enforces the staff role.
 def get_current_staff(
-    current: Staff = Depends(require_role("staff")),
-) -> Staff:
+    current: Principal = Depends(require_role(*STAFF_ROLES)),
+) -> Principal:
     return current
+
+
+def issue_code(
+    db: Session,
+    *,
+    phone: str,
+    purpose: str,
+    facility_id: int | None = None,
+    role: str | None = None,
+    minutes: int = 15,
+) -> str:
+    """Store a hashed OTP and return the plaintext code once."""
+    code = new_otp()
+    db.add(
+        OneTimeCode(
+            phone=phone,
+            purpose=purpose,
+            code_hash=hash_code(code),
+            facility_id=facility_id,
+            role=role,
+            expires_at=datetime.now() + timedelta(minutes=minutes),
+        )
+    )
+    db.flush()
+    return code
+
+
+def consume_code(
+    db: Session, *, phone: str, purpose: str, code: str
+) -> OneTimeCode | None:
+    now = datetime.now()
+    row = (
+        db.query(OneTimeCode)
+        .filter(
+            OneTimeCode.phone == phone,
+            OneTimeCode.purpose == purpose,
+            OneTimeCode.used_at.is_(None),
+            OneTimeCode.expires_at >= now,
+        )
+        .order_by(OneTimeCode.id.desc())
+        .first()
+    )
+    if row is None or row.code_hash != hash_code(code):
+        return None
+    row.used_at = now
+    db.flush()
+    return row

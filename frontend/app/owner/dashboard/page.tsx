@@ -15,6 +15,7 @@ import {
 
 import AuthGate from "@/components/AuthGate";
 import { api, ApiError } from "@/lib/api";
+import { api } from "@/lib/api";
 import { clearAuth, getUser } from "@/lib/auth";
 import type { Booking, Dog } from "@/lib/types";
 
@@ -45,8 +46,10 @@ export default function OwnerDashboardPage() {
   }, []);
 
   const onLogout = () => {
-    clearAuth();
-    router.replace("/login");
+    void api.post("/auth/logout", {}).catch(() => undefined).finally(() => {
+      clearAuth();
+      router.replace("/login");
+    });
   };
 
   return (

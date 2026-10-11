@@ -22,7 +22,7 @@ from langchain_core.tools import tool
 from sqlalchemy import select
 
 from audit import write_audit
-from db import Booking, Dog, Incident, SessionLocal, Staff
+from db import Booking, Dog, Incident, SessionLocal, User
 
 load_dotenv()
 
@@ -47,9 +47,14 @@ def _fmt_dt(dt: Optional[datetime]) -> str:
     return f"{hours // 24}d ago"
 
 
-def _find_dog_by_name(db, name: str) -> Optional[Dog]:
+def _find_dog_by_name(
+    db, name: str, facility_id: int, owner_user_id: Optional[int] = None
+) -> Optional[Dog]:
     name_l = name.strip().lower()
-    rows = db.scalars(select(Dog)).all()
+    q = select(Dog).where(Dog.facility_id == facility_id)
+    if owner_user_id is not None:
+        q = q.where(Dog.owner_user_id == owner_user_id)
+    rows = db.scalars(q).all()
     for d in rows:
         if d.name.lower() == name_l:
             return d
@@ -67,8 +72,11 @@ PARALLEL_API_URL = "https://api.parallel.ai/v1beta/search"
 # ---------------------------------------------------------------------------
 
 
-def make_tools(staff_id: int) -> list:
-    """Return the 4 tools with `staff_id` captured by closure."""
+def make_tools(staff_id: int, facility_id: int, role: str = "attendant") -> list:
+    """Return tools bound to one user, one facility, and that membership's role."""
+
+    owner_scope = staff_id if role == "parent" else None
+    is_staff = role in ("admin", "attendant")
 
     @tool
     def query_db(query_type: str, params: Optional[dict] = None) -> str:
@@ -94,11 +102,16 @@ def make_tools(staff_id: int) -> list:
         try:
             if query_type == "todays_bookings":
                 today = date.today()
-                rows = (
-                    db.query(Booking)
-                    .filter(Booking.start_date <= today, Booking.end_date >= today)
-                    .all()
+                q = db.query(Booking).filter(
+                    Booking.facility_id == facility_id,
+                    Booking.start_date <= today,
+                    Booking.end_date >= today,
                 )
+                if owner_scope is not None:
+                    q = q.join(Dog, Booking.dog_id == Dog.id).filter(
+                        Dog.owner_user_id == owner_scope
+                    )
+                rows = q.all()
                 if not rows:
                     return "No dogs in facility today."
                 lines = [f"{len(rows)} dog(s) in facility today:"]
@@ -114,9 +127,16 @@ def make_tools(staff_id: int) -> list:
                 # start_date > today (strictly future) -- excludes dogs
                 # already in care today. For currently-staying dogs use
                 # `todays_bookings` instead.
-                q = db.query(Booking).filter(Booking.start_date > today)
+                q = db.query(Booking).filter(
+                    Booking.facility_id == facility_id,
+                    Booking.start_date > today,
+                )
+                if owner_scope is not None:
+                    q = q.join(Dog, Booking.dog_id == Dog.id).filter(
+                        Dog.owner_user_id == owner_scope
+                    )
                 if dog_name:
-                    target = _find_dog_by_name(db, dog_name)
+                    target = _find_dog_by_name(db, dog_name, facility_id, owner_scope)
                     if target is None:
                         return f"No dog named '{dog_name}' found."
                     q = q.filter(Booking.dog_id == target.id)
@@ -143,7 +163,7 @@ def make_tools(staff_id: int) -> list:
                 name = params_local.get("name", "").strip()
                 if not name:
                     return "Error: dog_by_name requires params={'name': '<dog name>'}"
-                d = _find_dog_by_name(db, name)
+                d = _find_dog_by_name(db, name, facility_id, owner_scope)
                 if d is None:
                     return f"No dog named '{name}' found in the facility."
                 return (
@@ -168,6 +188,7 @@ def make_tools(staff_id: int) -> list:
                 rows = (
                     db.query(Booking)
                     .filter(
+                        Booking.facility_id == facility_id,
                         Booking.start_date <= today,
                         Booking.end_date >= today,
                         Booking.status.in_(("checked_in", "in_care")),
@@ -188,6 +209,7 @@ def make_tools(staff_id: int) -> list:
             if query_type == "recent_incidents":
                 rows = (
                     db.query(Incident)
+                    .filter(Incident.facility_id == facility_id)
                     .order_by(Incident.created_at.desc())
                     .limit(20)
                     .all()
@@ -206,7 +228,8 @@ def make_tools(staff_id: int) -> list:
             if query_type == "vaccination_status":
                 rows = db.scalars(
                     select(Dog).where(
-                        Dog.vaccination_status.in_(("expiring_soon", "expired"))
+                        Dog.facility_id == facility_id,
+                        Dog.vaccination_status.in_(("expiring_soon", "expired")),
                     )
                 ).all()
                 if not rows:
@@ -259,7 +282,9 @@ def make_tools(staff_id: int) -> list:
         """
         db = SessionLocal()
         try:
-            dog = _find_dog_by_name(db, dog_name)
+            if not is_staff:
+                return "Error: only facility staff can update a dog's status."
+            dog = _find_dog_by_name(db, dog_name, facility_id)
             if dog is None:
                 return f"No dog named '{dog_name}' found."
 
@@ -267,6 +292,7 @@ def make_tools(staff_id: int) -> list:
             booking = (
                 db.query(Booking)
                 .filter(
+                    Booking.facility_id == facility_id,
                     Booking.dog_id == dog.id,
                     Booking.start_date <= today,
                     Booking.end_date >= today,
@@ -277,7 +303,10 @@ def make_tools(staff_id: int) -> list:
             if booking is None:
                 booking = (
                     db.query(Booking)
-                    .filter(Booking.dog_id == dog.id)
+                    .filter(
+                        Booking.facility_id == facility_id,
+                        Booking.dog_id == dog.id,
+                    )
                     .order_by(Booking.start_date.desc())
                     .first()
                 )
@@ -290,6 +319,7 @@ def make_tools(staff_id: int) -> list:
                 booking.status = new_status
                 write_audit(
                     db,
+                    facility_id=facility_id,
                     staff_id=staff_id,
                     action="update_status",
                     target_type="booking",
@@ -310,6 +340,7 @@ def make_tools(staff_id: int) -> list:
                 setattr(booking, field, now)
                 write_audit(
                     db,
+                    facility_id=facility_id,
                     staff_id=staff_id,
                     action="update_activity",
                     target_type="booking",
@@ -357,11 +388,14 @@ def make_tools(staff_id: int) -> list:
             if severity not in _SEVERITIES:
                 return f"Error: invalid severity '{severity}'. Valid: {sorted(_SEVERITIES)}."
 
-            dog = _find_dog_by_name(db, dog_name)
+            if not is_staff:
+                return "Error: only facility staff can log incidents."
+            dog = _find_dog_by_name(db, dog_name, facility_id)
             if dog is None:
                 return f"No dog named '{dog_name}' found - cannot log incident."
 
             incident = Incident(
+                facility_id=facility_id,
                 dog_id=dog.id,
                 staff_id=staff_id,
                 type=incident_type,
@@ -372,6 +406,7 @@ def make_tools(staff_id: int) -> list:
             db.flush()
             write_audit(
                 db,
+                facility_id=facility_id,
                 staff_id=staff_id,
                 action="log_incident",
                 target_type="incident",
@@ -470,13 +505,13 @@ def make_tools(staff_id: int) -> list:
         """
         db = SessionLocal()
         try:
-            user = db.get(Staff, staff_id)
+            user = db.get(User, staff_id)
             if user is None:
                 return "Error: current user not found."
-            if user.role != "owner":
+            if role != "parent":
                 return (
-                    "Error: only owners can register a dog. Staff should "
-                    "create dogs through the seed data, not via chat."
+                    "Error: only pet parents can register a dog. Staff should "
+                    "not create dogs via chat."
                 )
             if vaccination_status not in _VACC:
                 return (
@@ -484,6 +519,7 @@ def make_tools(staff_id: int) -> list:
                     f"{sorted(_VACC)}, got {vaccination_status!r}."
                 )
             dog = Dog(
+                facility_id=facility_id,
                 name=name,
                 breed=breed,
                 age_years=age_years,
@@ -502,6 +538,7 @@ def make_tools(staff_id: int) -> list:
             db.flush()
             write_audit(
                 db,
+                facility_id=facility_id,
                 staff_id=staff_id,
                 action="register_dog",
                 target_type="dog",
@@ -537,11 +574,11 @@ def make_tools(staff_id: int) -> list:
         """
         db = SessionLocal()
         try:
-            user = db.get(Staff, staff_id)
+            user = db.get(User, staff_id)
             if user is None:
                 return "Error: current user not found."
-            if user.role != "owner":
-                return "Error: only owners can create bookings via chat."
+            if role != "parent":
+                return "Error: only pet parents can create bookings via chat."
 
             try:
                 start = date.fromisoformat(start_date)
@@ -554,13 +591,14 @@ def make_tools(staff_id: int) -> list:
             if end < start:
                 return "Error: end_date must be on or after start_date."
 
-            dog = _find_dog_by_name(db, dog_name)
+            dog = _find_dog_by_name(db, dog_name, facility_id, staff_id)
             if dog is None:
                 return f"No dog named '{dog_name}' found - register them first."
             if dog.owner_user_id != user.id:
                 return f"'{dog.name}' isn't on your profile - you can only book stays for your own dogs."
 
             booking = Booking(
+                facility_id=facility_id,
                 dog_id=dog.id,
                 start_date=start,
                 end_date=end,
@@ -571,6 +609,7 @@ def make_tools(staff_id: int) -> list:
             db.flush()
             write_audit(
                 db,
+                facility_id=facility_id,
                 staff_id=staff_id,
                 action="create_booking",
                 target_type="booking",

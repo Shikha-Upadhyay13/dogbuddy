@@ -1,7 +1,8 @@
-"""Tiny helper for writing audit_log rows.
+"""Write audit_log rows.
 
-Every state-changing endpoint and every agent tool MUST call write_audit
-so that audit_log is a complete record of who did what, when.
+Every state-changing endpoint and every agent tool calls write_audit so the
+log is a complete record of who did what, in which facility. It is not the
+notification inbox.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from db import AuditLog
 def write_audit(
     db: Session,
     *,
+    facility_id: int,
     staff_id: int,
     action: str,
     target_type: str,
@@ -25,6 +27,7 @@ def write_audit(
 ) -> AuditLog:
     """Insert one audit_log row. Caller is responsible for committing."""
     row = AuditLog(
+        facility_id=facility_id,
         staff_id=staff_id,
         action=action,
         target_type=target_type,

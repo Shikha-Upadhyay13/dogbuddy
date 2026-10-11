@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Dog as DogIcon, Loader2, ArrowRight } from "lucide-react";
 
 import { api, ApiError } from "@/lib/api";
-import { saveAuth } from "@/lib/auth";
+import { homeForRole, saveUser } from "@/lib/auth";
 import type { AuthResponse } from "@/lib/types";
 
 // Same hero image as /login -- consistent brand on the public surface.
@@ -14,10 +14,28 @@ const HERO_IMG =
   "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=1400&q=85";
 
 export default function SignupPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center text-muted">
+          Loading...
+        </div>
+      }
+    >
+      <SignupForm />
+    </Suspense>
+  );
+}
+
+function SignupForm() {
   const router = useRouter();
+  const params = useSearchParams();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [facilitySlug, setFacilitySlug] = useState(
+    params.get("facility") ?? "demo",
+  );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -29,12 +47,16 @@ export default function SignupPage() {
     try {
       const res = await api.post<AuthResponse>(
         "/auth/signup",
-        { name, phone, password },
+        { name, phone, password, facility_slug: facilitySlug },
         { skipAuth: true },
       );
-      saveAuth(res.token, res.staff);
-      // Self-signups are always owners; backend enforces this.
-      router.replace("/owner/dashboard");
+      if (!res.user) {
+        setError("Could not start a session.");
+        setBusy(false);
+        return;
+      }
+      saveUser(res.user);
+      router.replace(homeForRole(res.user.role));
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 400) {
@@ -115,6 +137,22 @@ export default function SignupPage() {
           </div>
 
           <form onSubmit={onSubmit} className="space-y-5">
+            <div>
+              <label
+                htmlFor="facility"
+                className="mb-1.5 block text-sm font-medium text-text/90"
+              >
+                Facility
+              </label>
+              <input
+                id="facility"
+                value={facilitySlug}
+                onChange={(e) => setFacilitySlug(e.target.value)}
+                className="w-full rounded-lg border border-border bg-surface px-3.5 py-3 text-text outline-none ring-accent/30 transition focus:border-accent focus:ring-2"
+                required
+                disabled={busy}
+              />
+            </div>
             <div>
               <label
                 htmlFor="name"

@@ -1,18 +1,34 @@
 // TS shapes that mirror backend Pydantic schemas.
 
-export type UserRole = "staff" | "owner";
+export type UserRole = "admin" | "attendant" | "parent";
 
-export type Staff = {
+export type SessionUser = {
   id: number;
   name: string;
   phone: string;
+  email?: string | null;
   role: UserRole;
+  facility_id: number;
+  facility_name: string;
+  facility_slug: string;
+};
+
+export type FacilityChoice = {
+  facility_id: number;
+  facility_name: string;
+  facility_slug: string;
+  role: string;
 };
 
 export type AuthResponse = {
-  token: string;
-  staff: Staff;
+  user: SessionUser | null;
+  needs_facility: boolean;
+  memberships: FacilityChoice[];
+  debug_code?: string | null;
 };
+
+/** Logged-in person. Kept as `Staff` so existing pages compile. */
+export type Staff = SessionUser;
 
 export type Dog = {
   id: number;

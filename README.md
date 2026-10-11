@@ -44,7 +44,11 @@ source .venv/bin/activate
 
 pip install -r requirements.txt
 cp .env.example .env       # fill in OPENAI_API_KEY + LANGSMITH_API_KEY etc.
-python seed.py             # populates dogbuddy.db with 1 staff + 8 dogs + 3 incidents
+
+# Postgres (from the repo root). Tests use a throwaway SQLite file instead.
+docker compose up -d db
+alembic upgrade head
+python seed.py             # demo facility slug `demo`, admin + 8 dogs
 uvicorn main:app --reload --port 8000
 ```
 
@@ -67,6 +71,7 @@ UI at `http://localhost:3000`.
 
 | Field | Value |
 | --- | --- |
+| Facility | `demo` |
 | Phone | `9999900001` |
 | Password | `dogbuddy123` |
 
@@ -74,9 +79,10 @@ The login screen surfaces this in dev mode.
 
 ### Owner (self-signup)
 
-Click "**Create an owner account**" on the login screen, fill in any
-name / phone / password. New signups are always `role='owner'` (staff
-accounts are seeded only — no UI for staff signup).
+Open `/f/demo/signup` (or the link on the login screen) and fill in any
+name / phone / password. New signups are always the `parent` role at that
+facility. Staff join by an admin invite (`/team/invites`, then
+`/accept-invite`).
 
 ## Two modes — what each sees
 

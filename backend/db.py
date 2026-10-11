@@ -1,7 +1,8 @@
-"""SQLAlchemy 2.0 models and session factory for DogBuddy.
+"""SQLAlchemy models and session factory.
 
-Schema source of truth: PRD Section 4. Do not change column names/types
-without updating the PRD first.
+Production data lives in Postgres (`DATABASE_URL`). Tests pin a throwaway
+SQLite file before this module is imported. `create_all` matches the models;
+Alembic revisions are the upgrade path for databases that already exist.
 """
 
 from __future__ import annotations
@@ -18,6 +19,8 @@ from sqlalchemy import (
     Integer,
     Float,
     String,
+    Text,
+    UniqueConstraint,
     create_engine,
 )
 from sqlalchemy.orm import (
@@ -31,9 +34,11 @@ from sqlalchemy.orm import (
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./dogbuddy.db")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+psycopg://dogbuddy:dogbuddy@localhost:5432/dogbuddy",
+)
 
-# SQLite needs check_same_thread=False so FastAPI can share connections across threads.
 engine = create_engine(
     DATABASE_URL,
     connect_args=(
@@ -53,22 +58,71 @@ def _now() -> datetime:
     return datetime.now()
 
 
-class Staff(Base):
-    """The `staff` table now stores BOTH facility staff and dog owners.
-    `role` distinguishes: 'staff' = facility user (Anand etc.), 'owner' =
-    a dog owner who self-registered via /auth/signup.
+class User(Base):
+    """A person. Which facility they belong to, and as whom, is a membership."""
 
-    Kept the table name `staff` for backward compat with existing data and
-    foreign keys, even though semantically it's now "users".
-    """
-
-    __tablename__ = "staff"
+    __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     phone: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    email: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
-    role: Mapped[str] = mapped_column(String, nullable=False, default="owner")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
+
+    memberships: Mapped[list["Membership"]] = relationship(back_populates="user")
+
+
+class Facility(Base):
+    __tablename__ = "facilities"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    slug: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    state: Mapped[str] = mapped_column(String, nullable=False, default="Karnataka")
+    phone: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    timezone: Mapped[str] = mapped_column(
+        String, nullable=False, default="Asia/Kolkata"
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
+
+    memberships: Mapped[list["Membership"]] = relationship(back_populates="facility")
+
+
+class Membership(Base):
+    """Role is scoped to one facility: admin, attendant, or parent."""
+
+    __tablename__ = "memberships"
+    __table_args__ = (
+        UniqueConstraint("user_id", "facility_id", name="uq_membership_user_facility"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    role: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
+
+    user: Mapped["User"] = relationship(back_populates="memberships")
+    facility: Mapped["Facility"] = relationship(back_populates="memberships")
+
+
+class OneTimeCode(Base):
+    """Hashed OTP for password reset and staff invites."""
+
+    __tablename__ = "one_time_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    phone: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    purpose: Mapped[str] = mapped_column(String, nullable=False)
+    code_hash: Mapped[str] = mapped_column(String, nullable=False)
+    facility_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("facilities.id"), nullable=True
+    )
+    role: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
 
 
@@ -76,6 +130,7 @@ class Dog(Base):
     __tablename__ = "dogs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     breed: Mapped[str] = mapped_column(String, nullable=False)
     age_years: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -87,10 +142,8 @@ class Dog(Base):
     vaccination_expires: Mapped[Optional[date]] = mapped_column(Date)
     owner_name: Mapped[str] = mapped_column(String, nullable=False)
     owner_phone: Mapped[str] = mapped_column(String, nullable=False)
-    # Links the dog to a user-mode owner account, if the owner self-registered.
-    # NULL for legacy / seeded dogs (visible only to staff).
     owner_user_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("staff.id"), nullable=True
+        ForeignKey("users.id"), nullable=True
     )
     vet_contact: Mapped[Optional[str]] = mapped_column(String)
     notes: Mapped[Optional[str]] = mapped_column(String)
@@ -104,6 +157,7 @@ class Booking(Base):
     __tablename__ = "bookings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
     dog_id: Mapped[int] = mapped_column(ForeignKey("dogs.id"), nullable=False)
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
@@ -121,8 +175,9 @@ class Incident(Base):
     __tablename__ = "incidents"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
     dog_id: Mapped[int] = mapped_column(ForeignKey("dogs.id"), nullable=False)
-    staff_id: Mapped[int] = mapped_column(ForeignKey("staff.id"), nullable=False)
+    staff_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     type: Mapped[str] = mapped_column(String, nullable=False)
     severity: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(String, nullable=False)
@@ -135,7 +190,8 @@ class AuditLog(Base):
     __tablename__ = "audit_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    staff_id: Mapped[int] = mapped_column(ForeignKey("staff.id"), nullable=False)
+    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    staff_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     action: Mapped[str] = mapped_column(String, nullable=False)
     target_type: Mapped[str] = mapped_column(String, nullable=False)
     target_id: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -144,7 +200,7 @@ class AuditLog(Base):
 
 
 def init_db() -> None:
-    """Create all tables. Safe to call repeatedly."""
+    """Create any missing tables. Safe to call repeatedly."""
     Base.metadata.create_all(bind=engine)
 
 

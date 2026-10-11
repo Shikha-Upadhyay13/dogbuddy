@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import { Dog as DogIcon, Loader2, ArrowRight } from "lucide-react";
 
 import { api, ApiError } from "@/lib/api";
-import { saveAuth } from "@/lib/auth";
-import type { AuthResponse } from "@/lib/types";
+import { homeForRole, saveUser } from "@/lib/auth";
+import type { AuthResponse, FacilityChoice } from "@/lib/types";
 
 // Stable Unsplash hot-link (no API key required). A warm portrait of a
 // golden retriever — sets the emotional tone for a dog-boarding product.
@@ -18,6 +18,8 @@ export default function LoginPage() {
   const router = useRouter();
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [facilitySlug, setFacilitySlug] = useState("demo");
+  const [choices, setChoices] = useState<FacilityChoice[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -29,13 +31,22 @@ export default function LoginPage() {
     try {
       const res = await api.post<AuthResponse>(
         "/auth/login",
-        { phone, password },
+        { phone, password, facility_slug: facilitySlug || undefined },
         { skipAuth: true },
       );
-      saveAuth(res.token, res.staff);
-      router.replace(
-        res.staff.role === "staff" ? "/dashboard" : "/owner/dashboard",
-      );
+      if (res.needs_facility) {
+        setChoices(res.memberships);
+        setError("Choose a facility, then sign in again.");
+        setBusy(false);
+        return;
+      }
+      if (!res.user) {
+        setError("Could not start a session.");
+        setBusy(false);
+        return;
+      }
+      saveUser(res.user);
+      router.replace(homeForRole(res.user.role));
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.status === 401 ? "Invalid phone or password" : err.detail);
@@ -120,6 +131,23 @@ export default function LoginPage() {
           <form onSubmit={onSubmit} className="space-y-5">
             <div>
               <label
+                htmlFor="facility"
+                className="mb-1.5 block text-sm font-medium text-text/90"
+              >
+                Facility
+              </label>
+              <input
+                id="facility"
+                value={facilitySlug}
+                onChange={(e) => setFacilitySlug(e.target.value)}
+                className="w-full rounded-lg border border-border bg-surface px-3.5 py-3 text-text outline-none ring-accent/30 transition focus:border-accent focus:ring-2"
+                placeholder="demo"
+                required
+                disabled={busy}
+              />
+            </div>
+            <div>
+              <label
                 htmlFor="phone"
                 className="mb-1.5 block text-sm font-medium text-text/90"
               >
@@ -176,13 +204,38 @@ export default function LoginPage() {
             </button>
           </form>
 
+          {choices.length > 0 && (
+            <ul className="mt-4 space-y-2 text-sm">
+              {choices.map((c) => (
+                <li key={c.facility_slug}>
+                  <button
+                    type="button"
+                    className="text-accent hover:underline"
+                    onClick={() => setFacilitySlug(c.facility_slug)}
+                  >
+                    {c.facility_name} ({c.role})
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
           <p className="mt-6 text-center text-sm text-muted">
             New here?{" "}
             <Link
-              href="/signup"
+              href={
+                facilitySlug
+                  ? `/f/${encodeURIComponent(facilitySlug)}/signup`
+                  : "/signup"
+              }
               className="font-medium text-accent hover:underline"
             >
-              Create an owner account
+              Create a parent account
+            </Link>
+          </p>
+          <p className="mt-2 text-center text-sm text-muted">
+            <Link href="/reset-password" className="hover:text-accent">
+              Forgot password
             </Link>
           </p>
 
@@ -192,6 +245,9 @@ export default function LoginPage() {
                 Dev login
               </p>
               <div className="flex flex-col gap-1 font-mono text-text">
+                <span>
+                  <span className="text-muted">facility </span>demo
+                </span>
                 <span>
                   <span className="text-muted">phone </span>9999900001
                 </span>
