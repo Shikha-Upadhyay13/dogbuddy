@@ -95,8 +95,7 @@ def test_other_facility_cannot_read_or_write_dog(client):
 def test_chat_tools_stay_inside_the_facility(client):
     ids = _seed_two_facilities()
     tools = {
-        t.name: t
-        for t in make_tools(ids["admin_b_id"], ids["facility_b_id"], "admin")
+        t.name: t for t in make_tools(ids["admin_b_id"], ids["facility_b_id"], "admin")
     }
     found = tools["query_db"].invoke(
         {"query_type": "dog_by_name", "params": {"name": "Rex"}}

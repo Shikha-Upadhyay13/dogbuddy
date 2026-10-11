@@ -6,7 +6,7 @@ import json
 import os
 import re
 import sys
-from datetime import date, datetime
+from datetime import date
 
 from fastapi import Depends, FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,6 +20,7 @@ try:
 except Exception:
     pass
 
+import portal
 from audit import write_audit
 from auth import (
     Principal,
@@ -34,7 +35,6 @@ from auth import (
     set_session_cookie,
     verify_password,
 )
-import portal
 from booking_service import (
     BookingError,
     assign_kennel,
@@ -59,6 +59,8 @@ from db import (
     get_db,
     init_db,
 )
+from limits import RateLimitMiddleware
+from observe import RequestIdMiddleware, init_sentry
 from schemas import (
     AcceptInviteRequest,
     ActivityUpdate,
@@ -82,9 +84,9 @@ from schemas import (
     KennelPatch,
     LoginRequest,
     OwnerOut,
-    QueueItem,
     PasswordResetConfirm,
     PasswordResetRequest,
+    QueueItem,
     SessionUser,
     SignupRequest,
     StatusUpdate,
@@ -97,10 +99,14 @@ from schemas import (
 def _http(err: BookingError) -> HTTPException:
     return HTTPException(status_code=err.status_code, detail=err.detail)
 
+
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
-app = FastAPI(title="DogBuddy API", version="0.4.0")
+init_sentry()
+app = FastAPI(title="DogBuddy API", version="0.5.0")
 app.include_router(portal.router)
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(RequestIdMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -176,7 +182,9 @@ def _establish_session(
     token = create_access_token(user.id, facility.id, membership.role)
     set_session_cookie(response, token)
     return AuthResponse(
-        user=_session_user(Principal(user=user, membership=membership, facility=facility))
+        user=_session_user(
+            Principal(user=user, membership=membership, facility=facility)
+        )
     )
 
 
@@ -245,18 +253,14 @@ def login(
     if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid phone or password")
 
-    memberships = (
-        db.query(Membership).filter(Membership.user_id == user.id).all()
-    )
+    memberships = db.query(Membership).filter(Membership.user_id == user.id).all()
     if not memberships:
         raise HTTPException(status_code=403, detail="No facility membership")
 
     chosen: Membership | None = None
     if body.facility_slug:
         facility = _facility_by_slug(db, body.facility_slug.strip().lower())
-        chosen = next(
-            (m for m in memberships if m.facility_id == facility.id), None
-        )
+        chosen = next((m for m in memberships if m.facility_id == facility.id), None)
         if chosen is None:
             raise HTTPException(status_code=403, detail="No facility membership")
     elif len(memberships) == 1:
@@ -380,9 +384,14 @@ def accept_invite(
     row = consume_code(
         db, phone=body.phone.strip(), purpose="invite", code=body.code.strip()
     )
-    if row is None or row.facility_id != facility.id or row.role not in (
-        "admin",
-        "attendant",
+    if (
+        row is None
+        or row.facility_id != facility.id
+        or row.role
+        not in (
+            "admin",
+            "attendant",
+        )
     ):
         raise HTTPException(status_code=400, detail="Invalid or expired code")
     user = db.query(User).filter(User.phone == body.phone.strip()).one_or_none()
@@ -409,9 +418,7 @@ def list_dogs(
     current: Principal = Depends(get_current_staff),
 ) -> list[DogOut]:
     rows = db.scalars(
-        select(Dog)
-        .where(Dog.facility_id == current.facility_id)
-        .order_by(Dog.name)
+        select(Dog).where(Dog.facility_id == current.facility_id).order_by(Dog.name)
     ).all()
     return [DogOut.model_validate(d) for d in rows]
 
@@ -523,6 +530,7 @@ def get_dog(
 # Bookings
 # ---------------------------------------------------------------------------
 
+
 def _to_today_item(b: Booking) -> TodayBookingItem:
     return TodayBookingItem(
         booking_id=b.id,
@@ -608,7 +616,9 @@ def update_booking_status(
                 acknowledge_severe=body.acknowledge_severe,
             )
         else:
-            raise HTTPException(status_code=422, detail=f"Invalid status: {body.status}")
+            raise HTTPException(
+                status_code=422, detail=f"Invalid status: {body.status}"
+            )
     except BookingError as err:
         raise _http(err) from err
     db.commit()
@@ -638,7 +648,9 @@ def update_booking_activity(
     booking = _booking_in_facility(db, booking_id, current.facility_id)
     kind = {"walk": "walk", "feed": "feed", "meds": "meds"}.get(body.activity)
     if kind is None:
-        raise HTTPException(status_code=422, detail=f"Invalid activity: {body.activity}")
+        raise HTTPException(
+            status_code=422, detail=f"Invalid activity: {body.activity}"
+        )
     try:
         log_care(
             db,
@@ -757,7 +769,9 @@ def booking_decision(
         raise _http(err) from err
     from notify import emit
 
-    parent = db.get(User, booking.dog.owner_user_id) if booking.dog.owner_user_id else None
+    parent = (
+        db.get(User, booking.dog.owner_user_id) if booking.dog.owner_user_id else None
+    )
     event = {
         "confirmed": "booking_confirmed",
         "awaiting_payment": "booking_confirmed",
@@ -1066,7 +1080,9 @@ def recent_audit_log(
         ]
     staff_names = {
         u.id: u.name
-        for u in db.query(User).filter(User.id.in_([r.staff_id for r in rows] or [-1])).all()
+        for u in db.query(User)
+        .filter(User.id.in_([r.staff_id for r in rows] or [-1]))
+        .all()
     }
     return [
         AuditLogOut(
@@ -1154,7 +1170,9 @@ def add_vaccination(
     if current.role == "parent" and dog.owner_user_id != current.id:
         raise HTTPException(status_code=404, detail="Dog not found")
     if current.role == "attendant":
-        raise HTTPException(status_code=403, detail="Only an admin can edit vaccinations")
+        raise HTTPException(
+            status_code=403, detail="Only an admin can edit vaccinations"
+        )
     row = VaccinationRecord(
         facility_id=current.facility_id,
         dog_id=dog.id,
@@ -1171,7 +1189,10 @@ def add_vaccination(
         action="update_vaccination",
         target_type="dog",
         target_id=dog.id,
-        details={"vaccine_type": row.vaccine_type, "expires_on": body.expires_on.isoformat()},
+        details={
+            "vaccine_type": row.vaccine_type,
+            "expires_on": body.expires_on.isoformat(),
+        },
     )
     db.commit()
     db.refresh(row)

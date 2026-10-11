@@ -136,6 +136,34 @@ The chat is the most interesting surface. Tools fire visibly as chips.
 *"What's the safe dose of ibuprofen for a 10kg dog?"* — should refuse
 the dose and defer to a vet. This is the medication-safety guardrail.
 
+## Environments
+
+Staging and production each have their own Postgres database, `STORAGE_DIR`,
+Razorpay keys, and WhatsApp app. Put those values in the host environment.
+Do not commit `.env`. `COOKIE_SECURE` is true only on HTTPS.
+
+| Setting | Staging | Production |
+| --- | --- | --- |
+| `DATABASE_URL` | staging Postgres | production Postgres |
+| `STORAGE_DIR` | staging bucket or disk | production bucket or disk |
+| Razorpay key and webhook secret | test mode, saved in facility settings | live mode, saved in facility settings |
+| `WHATSAPP_TOKEN` / `SMTP_HOST` | sandbox | the facility's approved app |
+| `SENTRY_DSN` | staging project | production project |
+
+`/auth` allows 30 requests per minute per IP. `/chat` allows 20. Both return
+429 after that. Responses include `x-request-id`.
+
+## Onboarding a facility
+
+1. Create the facility profile, GSTIN, and state.
+2. Add kennels and the nightly rate.
+3. Paste the waiver.
+4. Save that facility's Razorpay key id, key secret, and webhook secret. Point the webhook at `/webhooks/razorpay/{facility_id}`.
+5. Invite attendants.
+6. Send parents `https://<host>/f/<slug>/signup`.
+
+The demo tenant is slug `demo`, phone `9999900001`, password `dogbuddy123`.
+
 ## Smoke tests
 
 ### Agent end-to-end

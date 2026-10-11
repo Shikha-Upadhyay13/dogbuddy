@@ -9,6 +9,7 @@ Create Date: 2026-10-11
 from typing import Sequence, Union
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "002_floor"
@@ -20,7 +21,9 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.add_column(
         "facilities",
-        sa.Column("booking_mode", sa.String(), nullable=False, server_default="request"),
+        sa.Column(
+            "booking_mode", sa.String(), nullable=False, server_default="request"
+        ),
     )
     op.add_column(
         "facilities",
@@ -42,7 +45,10 @@ def upgrade() -> None:
     op.add_column(
         "facilities",
         sa.Column(
-            "require_vaccination", sa.Boolean(), nullable=False, server_default=sa.true()
+            "require_vaccination",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.true(),
         ),
     )
     op.add_column(
@@ -77,15 +83,21 @@ def upgrade() -> None:
     op.add_column("bookings", sa.Column("belongings", sa.Text(), nullable=True))
     op.add_column(
         "bookings",
-        sa.Column("diet_confirmed", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column(
+            "diet_confirmed", sa.Boolean(), nullable=False, server_default=sa.false()
+        ),
     )
     op.add_column(
         "bookings",
-        sa.Column("meds_confirmed", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column(
+            "meds_confirmed", sa.Boolean(), nullable=False, server_default=sa.false()
+        ),
     )
     op.add_column(
         "bookings",
-        sa.Column("vet_confirmed", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column(
+            "vet_confirmed", sa.Boolean(), nullable=False, server_default=sa.false()
+        ),
     )
     op.add_column("bookings", sa.Column("waiver_version_accepted", sa.Integer()))
     op.add_column(
@@ -122,7 +134,9 @@ def upgrade() -> None:
         sa.Column(
             "facility_id", sa.Integer(), sa.ForeignKey("facilities.id"), nullable=False
         ),
-        sa.Column("booking_id", sa.Integer(), sa.ForeignKey("bookings.id"), nullable=False),
+        sa.Column(
+            "booking_id", sa.Integer(), sa.ForeignKey("bookings.id"), nullable=False
+        ),
         sa.Column("dog_id", sa.Integer(), sa.ForeignKey("dogs.id"), nullable=False),
         sa.Column("staff_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=False),
         sa.Column("kind", sa.String(), nullable=False),

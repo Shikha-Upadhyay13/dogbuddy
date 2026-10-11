@@ -106,7 +106,7 @@ def patch_account(
     if "email" in body:
         user.email = (str(body["email"]).strip() or None) if body["email"] else None
     if "billing_state" in body:
-        user.billing_state = (str(body.get("billing_state") or "").strip() or None)
+        user.billing_state = str(body.get("billing_state") or "").strip() or None
     db.commit()
     return {"ok": True, "name": user.name, "email": user.email}
 
@@ -216,11 +216,13 @@ def patch_facility(
         if field in body:
             setattr(facility, field, bool(body[field]))
     if "gstin" in body:
-        facility.gstin = (str(body.get("gstin") or "").strip() or None)
+        facility.gstin = str(body.get("gstin") or "").strip() or None
     if body.get("gst_rate_bps") is not None:
         facility.gst_rate_bps = int(body["gst_rate_bps"])
     if "razorpay_key_id" in body:
-        facility.razorpay_key_id = (str(body.get("razorpay_key_id") or "").strip() or None)
+        facility.razorpay_key_id = (
+            str(body.get("razorpay_key_id") or "").strip() or None
+        )
     from billing import encrypt_secret
 
     if body.get("razorpay_key_secret"):
@@ -343,7 +345,9 @@ def send_report_card(
         created_by=current.id,
     )
     db.add(card)
-    parent = db.get(User, booking.dog.owner_user_id) if booking.dog.owner_user_id else None
+    parent = (
+        db.get(User, booking.dog.owner_user_id) if booking.dog.owner_user_id else None
+    )
     if parent is not None:
         emit(
             db,
@@ -352,7 +356,7 @@ def send_report_card(
             event="report_card",
             title=f"Update on {booking.dog.name}",
             body=summary,
-            link=f"/owner/dashboard",
+            link="/owner/dashboard",
         )
     db.commit()
     return {"ok": True, "summary": summary}

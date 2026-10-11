@@ -9,6 +9,7 @@ Create Date: 2026-10-11
 from typing import Sequence, Union
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "003_notify"
@@ -109,7 +110,9 @@ def upgrade() -> None:
         sa.Column("day", sa.Date(), nullable=False),
         sa.Column("summary", sa.Text(), nullable=False),
         sa.Column("sent_at", sa.DateTime(), nullable=True),
-        sa.Column("created_by", sa.Integer(), sa.ForeignKey("users.id"), nullable=False),
+        sa.Column(
+            "created_by", sa.Integer(), sa.ForeignKey("users.id"), nullable=False
+        ),
         sa.Column("created_at", sa.DateTime(), nullable=False),
     )
 

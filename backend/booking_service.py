@@ -32,9 +32,7 @@ def nights(start: date, end: date) -> int:
 
 def refresh_vaccination_status(db: Session, dog: Dog) -> None:
     records = (
-        db.query(VaccinationRecord)
-        .filter(VaccinationRecord.dog_id == dog.id)
-        .all()
+        db.query(VaccinationRecord).filter(VaccinationRecord.dog_id == dog.id).all()
     )
     today = date.today()
     if not records:
@@ -53,9 +51,7 @@ def refresh_vaccination_status(db: Session, dog: Dog) -> None:
 
 def vaccination_ok(db: Session, dog: Dog, on_date: date) -> bool:
     records = (
-        db.query(VaccinationRecord)
-        .filter(VaccinationRecord.dog_id == dog.id)
-        .all()
+        db.query(VaccinationRecord).filter(VaccinationRecord.dog_id == dog.id).all()
     )
     return any(r.expires_on >= on_date for r in records)
 
@@ -280,7 +276,8 @@ def open_severe_incidents(db: Session, booking: Booking) -> list[Incident]:
             Incident.dog_id == booking.dog_id,
             Incident.severity == "severe",
             Incident.acknowledged_at.is_(None),
-            Incident.created_at >= datetime.combine(booking.start_date, datetime.min.time()),
+            Incident.created_at
+            >= datetime.combine(booking.start_date, datetime.min.time()),
         )
         .all()
     )
@@ -301,7 +298,9 @@ def check_in(
     if booking.status != "confirmed":
         raise BookingError(422, "Only a confirmed stay can be checked in")
     if not (diet_confirmed and meds_confirmed and vet_confirmed):
-        raise BookingError(422, "Confirm diet, medication, and vet contact before check-in")
+        raise BookingError(
+            422, "Confirm diet, medication, and vet contact before check-in"
+        )
     if kennel_id is not None:
         assign_kennel(
             db,
@@ -402,9 +401,11 @@ def log_care(
         created_at=now,
     )
     db.add(row)
-    field = {"walk": "last_walked_at", "feed": "last_fed_at", "meds": "last_meds_at"}.get(
-        kind
-    )
+    field = {
+        "walk": "last_walked_at",
+        "feed": "last_fed_at",
+        "meds": "last_meds_at",
+    }.get(kind)
     if field:
         setattr(booking, field, now)
     db.flush()

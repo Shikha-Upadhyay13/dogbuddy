@@ -138,9 +138,7 @@ async def astream_chat(
       {"type": "done"}
       {"type": "error", "detail": "..."}
     """
-    agent = await _build_agent(
-        staff_name, staff_id, role, facility_id, facility_name
-    )
+    agent = await _build_agent(staff_name, staff_id, role, facility_id, facility_name)
     config = {"configurable": {"thread_id": thread_id}}
     inputs = {"messages": [HumanMessage(content=message)]}
 

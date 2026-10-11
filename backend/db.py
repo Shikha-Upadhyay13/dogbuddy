@@ -8,7 +8,7 @@ Alembic revisions are the upgrade path for databases that already exist.
 from __future__ import annotations
 
 import os
-from datetime import datetime, date
+from datetime import date, datetime
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -16,9 +16,9 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
-    Float,
     String,
     Text,
     UniqueConstraint,
@@ -27,10 +27,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
+    Session,
     mapped_column,
     relationship,
     sessionmaker,
-    Session,
 )
 
 load_dotenv()
@@ -99,7 +99,9 @@ class Facility(Base):
     waiver_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
     waiver_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     nightly_rate_paise: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    whatsapp_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    whatsapp_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     email_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     gstin: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     gst_rate_bps: Mapped[int] = mapped_column(Integer, nullable=False, default=1800)
@@ -122,7 +124,9 @@ class Membership(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    facility_id: Mapped[int] = mapped_column(
+        ForeignKey("facilities.id"), nullable=False
+    )
     role: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
 
@@ -152,7 +156,9 @@ class Dog(Base):
     __tablename__ = "dogs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    facility_id: Mapped[int] = mapped_column(
+        ForeignKey("facilities.id"), nullable=False
+    )
     name: Mapped[str] = mapped_column(String, nullable=False)
     breed: Mapped[str] = mapped_column(String, nullable=False)
     age_years: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -173,16 +179,16 @@ class Dog(Base):
 
     bookings: Mapped[list["Booking"]] = relationship(back_populates="dog")
     incidents: Mapped[list["Incident"]] = relationship(back_populates="dog")
-    vaccinations: Mapped[list["VaccinationRecord"]] = relationship(
-        back_populates="dog"
-    )
+    vaccinations: Mapped[list["VaccinationRecord"]] = relationship(back_populates="dog")
 
 
 class Booking(Base):
     __tablename__ = "bookings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    facility_id: Mapped[int] = mapped_column(
+        ForeignKey("facilities.id"), nullable=False
+    )
     dog_id: Mapped[int] = mapped_column(ForeignKey("dogs.id"), nullable=False)
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
@@ -195,16 +201,22 @@ class Booking(Base):
     diet_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     meds_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     vet_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    waiver_version_accepted: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    waiver_version_accepted: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True
+    )
     vaccination_override_by: Mapped[Optional[int]] = mapped_column(
         ForeignKey("users.id"), nullable=True
     )
-    vaccination_override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    vaccination_override_reason: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )
     quote_saved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     quote_nights: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     quote_nightly_paise: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     quote_addons_paise: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    quote_subtotal_paise: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    quote_subtotal_paise: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
     quote_tax_paise: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     quote_total_paise: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     selected_addon_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -220,7 +232,9 @@ class Incident(Base):
     __tablename__ = "incidents"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    facility_id: Mapped[int] = mapped_column(
+        ForeignKey("facilities.id"), nullable=False
+    )
     dog_id: Mapped[int] = mapped_column(ForeignKey("dogs.id"), nullable=False)
     staff_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     type: Mapped[str] = mapped_column(String, nullable=False)
@@ -243,7 +257,9 @@ class Kennel(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    facility_id: Mapped[int] = mapped_column(
+        ForeignKey("facilities.id"), nullable=False
+    )
     name: Mapped[str] = mapped_column(String, nullable=False)
     status: Mapped[str] = mapped_column(String, nullable=False, default="available")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
@@ -253,7 +269,9 @@ class VaccinationRecord(Base):
     __tablename__ = "vaccination_records"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    facility_id: Mapped[int] = mapped_column(
+        ForeignKey("facilities.id"), nullable=False
+    )
     dog_id: Mapped[int] = mapped_column(ForeignKey("dogs.id"), nullable=False)
     vaccine_type: Mapped[str] = mapped_column(String, nullable=False)
     expires_on: Mapped[date] = mapped_column(Date, nullable=False)
@@ -267,7 +285,9 @@ class CareLog(Base):
     __tablename__ = "care_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    facility_id: Mapped[int] = mapped_column(
+        ForeignKey("facilities.id"), nullable=False
+    )
     booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), nullable=False)
     dog_id: Mapped[int] = mapped_column(ForeignKey("dogs.id"), nullable=False)
     staff_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
@@ -281,7 +301,9 @@ class FacilityAddon(Base):
     __tablename__ = "facility_addons"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    facility_id: Mapped[int] = mapped_column(
+        ForeignKey("facilities.id"), nullable=False
+    )
     name: Mapped[str] = mapped_column(String, nullable=False)
     price_paise: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
@@ -291,8 +313,12 @@ class Notification(Base):
     __tablename__ = "notifications"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
-    recipient_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    facility_id: Mapped[int] = mapped_column(
+        ForeignKey("facilities.id"), nullable=False
+    )
+    recipient_user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"), nullable=False
+    )
     type: Mapped[str] = mapped_column(String, nullable=False)
     title: Mapped[str] = mapped_column(String, nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
@@ -327,7 +353,9 @@ class NotificationPreference(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    facility_id: Mapped[int] = mapped_column(
+        ForeignKey("facilities.id"), nullable=False
+    )
     category: Mapped[str] = mapped_column(String, nullable=False)
     whatsapp: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     email: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -349,7 +377,9 @@ class ReportCard(Base):
     __tablename__ = "report_cards"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    facility_id: Mapped[int] = mapped_column(
+        ForeignKey("facilities.id"), nullable=False
+    )
     booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), nullable=False)
     day: Mapped[date] = mapped_column(Date, nullable=False)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
@@ -367,7 +397,9 @@ class Invoice(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    facility_id: Mapped[int] = mapped_column(
+        ForeignKey("facilities.id"), nullable=False
+    )
     booking_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("bookings.id"), nullable=True
     )
@@ -393,7 +425,9 @@ class Payment(Base):
     __tablename__ = "payments"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    facility_id: Mapped[int] = mapped_column(
+        ForeignKey("facilities.id"), nullable=False
+    )
     invoice_id: Mapped[int] = mapped_column(ForeignKey("invoices.id"), nullable=False)
     amount_paise: Mapped[int] = mapped_column(Integer, nullable=False)
     method: Mapped[str] = mapped_column(String, nullable=False)
@@ -401,7 +435,9 @@ class Payment(Base):
         String, nullable=True, unique=True
     )
     status: Mapped[str] = mapped_column(String, nullable=False, default="captured")
-    recorded_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    recorded_by: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
 
 
@@ -409,7 +445,9 @@ class LedgerEntry(Base):
     __tablename__ = "ledger_entries"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    facility_id: Mapped[int] = mapped_column(
+        ForeignKey("facilities.id"), nullable=False
+    )
     payment_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("payments.id"), nullable=True
     )
@@ -424,7 +462,9 @@ class AuditLog(Base):
     __tablename__ = "audit_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    facility_id: Mapped[int] = mapped_column(
+        ForeignKey("facilities.id"), nullable=False
+    )
     staff_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     action: Mapped[str] = mapped_column(String, nullable=False)
     target_type: Mapped[str] = mapped_column(String, nullable=False)

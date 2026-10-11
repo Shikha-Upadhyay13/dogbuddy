@@ -36,7 +36,9 @@ def _setup():
     other = Facility(name="Other", slug="other", state="Kerala", waiver_text="")
     db.add_all([facility, other])
     db.flush()
-    admin = User(name="Ada", phone="9200000001", password_hash=hash_password("password1"))
+    admin = User(
+        name="Ada", phone="9200000001", password_hash=hash_password("password1")
+    )
     parent = User(
         name="Pat",
         phone="9200000002",
@@ -185,9 +187,9 @@ def test_vaccination_reminder_is_sent_once(client):
     db.commit()
     assert scan_due_reminders(db) >= 1
     db.commit()
-    first = (
-        db.query(NotificationPreference).count()
-    )  # preferences are created as a side effect of emit
+    first = db.query(
+        NotificationPreference
+    ).count()  # preferences are created as a side effect of emit
     assert first >= 1
     again = scan_due_reminders(db)
     db.commit()

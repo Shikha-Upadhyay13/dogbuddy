@@ -205,7 +205,9 @@ def _issue(
     )
     db.add(invoice)
     db.flush()
-    invoice.pdf_key = save_bytes(facility.id, f"invoice-{invoice.number}.pdf", _pdf(invoice, facility))
+    invoice.pdf_key = save_bytes(
+        facility.id, f"invoice-{invoice.number}.pdf", _pdf(invoice, facility)
+    )
     if kind == "deposit" and invoice.total_paise > 0:
         invoice.payment_link = create_payment_link(facility, invoice)
     db.flush()
@@ -270,7 +272,10 @@ def sync_booking_money(
     db: Session, facility: Facility, booking: Booking, actor_id: int
 ) -> None:
     freeze_quote(db, facility, booking)
-    if booking.status == "awaiting_payment" and _existing(db, booking, "deposit") is None:
+    if (
+        booking.status == "awaiting_payment"
+        and _existing(db, booking, "deposit") is None
+    ):
         deposit = booking.quote_total_paise * facility.deposit_percent // 100
         if deposit > 0:
             subtotal = deposit * 10000 // (10000 + facility.gst_rate_bps)
@@ -392,7 +397,9 @@ def record_payment(
             details={"method": method, "amount_paise": amount_paise},
         )
     _confirm_if_deposit_met(db, invoice)
-    parent = _parent(db, db.get(Booking, invoice.booking_id)) if invoice.booking_id else None
+    parent = (
+        _parent(db, db.get(Booking, invoice.booking_id)) if invoice.booking_id else None
+    )
     recipients = staff_users(db, facility.id)
     if parent is not None:
         recipients = recipients + [parent]
@@ -408,9 +415,7 @@ def record_payment(
     return payment
 
 
-def handle_webhook(
-    db: Session, facility_id: int, body: bytes, signature: str
-) -> dict:
+def handle_webhook(db: Session, facility_id: int, body: bytes, signature: str) -> dict:
     facility = db.get(Facility, facility_id)
     if facility is None:
         raise BillingError(404, "Facility not found")
@@ -445,7 +450,11 @@ def handle_webhook(
                 status="failed",
             )
         )
-        parent = _parent(db, db.get(Booking, invoice.booking_id)) if invoice.booking_id else None
+        parent = (
+            _parent(db, db.get(Booking, invoice.booking_id))
+            if invoice.booking_id
+            else None
+        )
         recipients = staff_users(db, facility.id)
         if parent is not None:
             recipients.append(parent)

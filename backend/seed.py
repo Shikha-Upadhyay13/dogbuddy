@@ -68,9 +68,7 @@ def seed_facility(session) -> tuple[Facility, User]:
     )
     session.add(admin)
     session.flush()
-    session.add(
-        Membership(user_id=admin.id, facility_id=facility.id, role="admin")
-    )
+    session.add(Membership(user_id=admin.id, facility_id=facility.id, role="admin"))
     session.flush()
     return facility, admin
 
@@ -283,8 +281,10 @@ def seed_dogs_and_bookings(session, facility_id: int):
             last_fed = NOW - timedelta(hours=2)
             last_meds = None
 
-        stored = "checked_in" if status in ("checked_in", "in_care") else (
-            "confirmed" if status == "scheduled" else status
+        stored = (
+            "checked_in"
+            if status in ("checked_in", "in_care")
+            else ("confirmed" if status == "scheduled" else status)
         )
         kennel_name = f"K-{kennel_counter:02d}" if status != "scheduled" else None
         kennel = None
@@ -388,7 +388,7 @@ def main() -> None:
         session.commit()
 
         # Verification summary
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
 
         n_dogs = session.scalar(select(func.count()).select_from(Dog))
         n_bookings = session.scalar(select(func.count()).select_from(Booking))

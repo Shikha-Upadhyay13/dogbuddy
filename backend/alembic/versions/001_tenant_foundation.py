@@ -9,6 +9,7 @@ Create Date: 2026-10-11
 from typing import Sequence, Union
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "001_tenant"
@@ -49,7 +50,9 @@ def upgrade() -> None:
         ),
         sa.Column("role", sa.String(), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.UniqueConstraint("user_id", "facility_id", name="uq_membership_user_facility"),
+        sa.UniqueConstraint(
+            "user_id", "facility_id", name="uq_membership_user_facility"
+        ),
     )
     op.create_table(
         "one_time_codes",
@@ -83,7 +86,9 @@ def upgrade() -> None:
         sa.Column("vaccination_expires", sa.Date(), nullable=True),
         sa.Column("owner_name", sa.String(), nullable=False),
         sa.Column("owner_phone", sa.String(), nullable=False),
-        sa.Column("owner_user_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=True),
+        sa.Column(
+            "owner_user_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=True
+        ),
         sa.Column("vet_contact", sa.String(), nullable=True),
         sa.Column("notes", sa.String(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),

@@ -16,6 +16,7 @@ os.environ["COOKIE_SAMESITE"] = "lax"
 os.environ["JWT_SECRET"] = "test-secret"
 os.environ["DOGBUDDY_DEBUG_OTP"] = "1"
 os.environ["DOGBUDDY_SKIP_JOBS"] = "1"
+os.environ["DOGBUDDY_DISABLE_RATE_LIMIT"] = "1"
 
 import pytest
 from fastapi.testclient import TestClient

@@ -200,7 +200,7 @@ def main() -> int:
 
     # audit_log verification
     print("--- audit_log after run ---")
-    from db import SessionLocal, AuditLog
+    from db import AuditLog, SessionLocal
 
     s = SessionLocal()
     rows = s.query(AuditLog).order_by(AuditLog.id).all()

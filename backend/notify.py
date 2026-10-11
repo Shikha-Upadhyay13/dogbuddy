@@ -301,7 +301,9 @@ def scan_due_reminders(db: Session) -> int:
     )
     for booking in dropoffs:
         parent = (
-            db.get(User, booking.dog.owner_user_id) if booking.dog.owner_user_id else None
+            db.get(User, booking.dog.owner_user_id)
+            if booking.dog.owner_user_id
+            else None
         )
         facility = db.get(Facility, booking.facility_id)
         link = f"/bookings/{booking.id}"
@@ -327,7 +329,9 @@ def scan_due_reminders(db: Session) -> int:
     )
     for booking in pickups:
         parent = (
-            db.get(User, booking.dog.owner_user_id) if booking.dog.owner_user_id else None
+            db.get(User, booking.dog.owner_user_id)
+            if booking.dog.owner_user_id
+            else None
         )
         facility = db.get(Facility, booking.facility_id)
         link = f"/bookings/{booking.id}"

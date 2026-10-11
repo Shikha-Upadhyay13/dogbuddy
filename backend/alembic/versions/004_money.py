@@ -9,6 +9,7 @@ Create Date: 2026-10-11
 from typing import Sequence, Union
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "004_money"
@@ -24,7 +25,9 @@ def upgrade() -> None:
         "facilities",
         sa.Column("gst_rate_bps", sa.Integer(), nullable=False, server_default="1800"),
     )
-    op.add_column("facilities", sa.Column("razorpay_key_id", sa.String(), nullable=True))
+    op.add_column(
+        "facilities", sa.Column("razorpay_key_id", sa.String(), nullable=True)
+    )
     op.add_column(
         "facilities", sa.Column("razorpay_key_secret", sa.Text(), nullable=True)
     )
@@ -39,7 +42,9 @@ def upgrade() -> None:
     )
     op.add_column(
         "bookings",
-        sa.Column("quote_saved", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column(
+            "quote_saved", sa.Boolean(), nullable=False, server_default=sa.false()
+        ),
     )
     for name, type_ in (
         ("quote_nights", sa.Integer()),
@@ -53,9 +58,7 @@ def upgrade() -> None:
             "bookings",
             sa.Column(name, type_, nullable=False, server_default="0"),
         )
-    op.add_column(
-        "bookings", sa.Column("selected_addon_ids", sa.Text(), nullable=True)
-    )
+    op.add_column("bookings", sa.Column("selected_addon_ids", sa.Text(), nullable=True))
     op.create_table(
         "invoices",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
@@ -94,7 +97,9 @@ def upgrade() -> None:
         sa.Column("method", sa.String(), nullable=False),
         sa.Column("razorpay_payment_id", sa.String(), nullable=True, unique=True),
         sa.Column("status", sa.String(), nullable=False),
-        sa.Column("recorded_by", sa.Integer(), sa.ForeignKey("users.id"), nullable=True),
+        sa.Column(
+            "recorded_by", sa.Integer(), sa.ForeignKey("users.id"), nullable=True
+        ),
         sa.Column("created_at", sa.DateTime(), nullable=False),
     )
     op.create_table(
@@ -103,7 +108,9 @@ def upgrade() -> None:
         sa.Column(
             "facility_id", sa.Integer(), sa.ForeignKey("facilities.id"), nullable=False
         ),
-        sa.Column("payment_id", sa.Integer(), sa.ForeignKey("payments.id"), nullable=True),
+        sa.Column(
+            "payment_id", sa.Integer(), sa.ForeignKey("payments.id"), nullable=True
+        ),
         sa.Column(
             "invoice_id", sa.Integer(), sa.ForeignKey("invoices.id"), nullable=False
         ),

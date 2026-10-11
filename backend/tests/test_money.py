@@ -35,7 +35,9 @@ def _money_world():
     other = Facility(name="Other", slug="money-other", state="Kerala", waiver_text="")
     db.add_all([facility, other])
     db.flush()
-    admin = User(name="Ada", phone="9300000001", password_hash=hash_password("password1"))
+    admin = User(
+        name="Ada", phone="9300000001", password_hash=hash_password("password1")
+    )
     parent = User(
         name="Pat",
         phone="9300000002",
@@ -87,7 +89,9 @@ def _login(client, phone, slug="money"):
     assert res.status_code == 200, res.text
 
 
-def test_quote_survives_a_rate_change_and_webhook_replay_confirms_once(client, monkeypatch):
+def test_quote_survives_a_rate_change_and_webhook_replay_confirms_once(
+    client, monkeypatch
+):
     monkeypatch.setenv("RAZORPAY_FAKE", "1")
     dog_id = _money_world()
     _login(client, "9300000002")
@@ -116,7 +120,9 @@ def test_quote_survives_a_rate_change_and_webhook_replay_confirms_once(client, m
 
     client.post("/auth/logout")
     _login(client, "9300000001")
-    accepted = client.post(f"/bookings/{booking_id}/decision", json={"action": "accept"})
+    accepted = client.post(
+        f"/bookings/{booking_id}/decision", json={"action": "accept"}
+    )
     assert accepted.status_code == 200, accepted.text
     assert accepted.json()["status"] == "awaiting_payment"
 
@@ -124,9 +130,10 @@ def test_quote_survives_a_rate_change_and_webhook_replay_confirms_once(client, m
     deposit = next(row for row in invoices if row["kind"] == "deposit")
     assert deposit["cgst_paise"] == deposit["sgst_paise"]
     assert deposit["igst_paise"] == 0
-    assert deposit["cgst_paise"] + deposit["sgst_paise"] + deposit["subtotal_paise"] == deposit[
-        "total_paise"
-    ]
+    assert (
+        deposit["cgst_paise"] + deposit["sgst_paise"] + deposit["subtotal_paise"]
+        == deposit["total_paise"]
+    )
     original_total = deposit["total_paise"]
 
     body = json.dumps(
@@ -148,15 +155,20 @@ def test_quote_survives_a_rate_change_and_webhook_replay_confirms_once(client, m
     db = SessionLocal()
     facility_id = db.query(Facility).filter(Facility.slug == "money").one().id
     db.close()
-    first = client.post(f"/webhooks/razorpay/{facility_id}", content=body, headers=headers)
+    first = client.post(
+        f"/webhooks/razorpay/{facility_id}", content=body, headers=headers
+    )
     assert first.status_code == 200, first.text
-    second = client.post(f"/webhooks/razorpay/{facility_id}", content=body, headers=headers)
+    second = client.post(
+        f"/webhooks/razorpay/{facility_id}", content=body, headers=headers
+    )
     assert second.json()["duplicate"] is True
 
     db = SessionLocal()
     assert db.get(Booking, booking_id).status == "confirmed"
     assert (
-        db.query(Payment).filter(Payment.razorpay_payment_id == "pay_test_1").count() == 1
+        db.query(Payment).filter(Payment.razorpay_payment_id == "pay_test_1").count()
+        == 1
     )
     invoice = db.get(Invoice, deposit["id"])
     assert invoice.total_paise == original_total

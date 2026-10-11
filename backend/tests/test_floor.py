@@ -31,8 +31,12 @@ def _world():
     )
     db.add(facility)
     db.flush()
-    admin = User(name="Ada", phone="9100000001", password_hash=hash_password("password1"))
-    parent = User(name="Pat", phone="9100000002", password_hash=hash_password("password1"))
+    admin = User(
+        name="Ada", phone="9100000001", password_hash=hash_password("password1")
+    )
+    parent = User(
+        name="Pat", phone="9100000002", password_hash=hash_password("password1")
+    )
     db.add_all([admin, parent])
     db.flush()
     db.add_all(
@@ -141,7 +145,9 @@ def test_accept_confirm_checkin_and_kennel_overlap(client):
 
     client.post("/auth/logout")
     _login(client, "9100000001")
-    accepted = client.post(f"/bookings/{booking_id}/decision", json={"action": "accept"})
+    accepted = client.post(
+        f"/bookings/{booking_id}/decision", json={"action": "accept"}
+    )
     assert accepted.status_code == 200, accepted.text
     assert accepted.json()["status"] == "confirmed"
 

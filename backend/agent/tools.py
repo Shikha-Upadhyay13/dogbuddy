@@ -595,7 +595,9 @@ def make_tools(staff_id: int, facility_id: int, role: str = "attendant") -> list
                 details={"name": name, "breed": breed, "via": "agent"},
             )
             db.commit()
-            return f"Registered {name} (#{dog.id}) - {breed}, {age_years}y, {weight_kg}kg."
+            return (
+                f"Registered {name} (#{dog.id}) - {breed}, {age_years}y, {weight_kg}kg."
+            )
         except Exception as e:
             db.rollback()
             return f"Could not register dog - {e}."
