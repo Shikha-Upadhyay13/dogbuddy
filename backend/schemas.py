@@ -119,6 +119,7 @@ class IncidentIn(BaseModel):
     type: str
     severity: str
     description: str
+    parent_visible: bool = False
 
 
 class IncidentOut(BaseModel):
@@ -128,13 +129,20 @@ class IncidentOut(BaseModel):
     type: str
     severity: str
     description: str
+    parent_visible: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
 
 
 class StatusUpdate(BaseModel):
-    status: str  # "checked_in" | "in_care" | "checked_out"
+    status: str  # "checked_in" | "checked_out"
+    belongings: str = ""
+    diet_confirmed: bool = False
+    meds_confirmed: bool = False
+    vet_confirmed: bool = False
+    kennel_id: Optional[int] = None
+    acknowledge_severe: bool = False
 
 
 class ActivityUpdate(BaseModel):
@@ -168,6 +176,50 @@ class CreateBookingRequest(BaseModel):
     start_date: date
     end_date: date
     kennel_id: Optional[str] = None
+    waiver_accepted: bool = False
+    override: bool = False
+    override_reason: Optional[str] = None
+
+
+class DecisionIn(BaseModel):
+    action: str
+
+
+class KennelIn(BaseModel):
+    name: str = Field(min_length=1)
+    status: str = "available"
+
+
+class KennelPatch(BaseModel):
+    status: str
+
+
+class KennelOut(BaseModel):
+    id: int
+    name: str
+    status: str
+
+    model_config = {"from_attributes": True}
+
+
+class VaccinationIn(BaseModel):
+    vaccine_type: str = Field(min_length=1)
+    expires_on: date
+
+
+class VaccinationOut(BaseModel):
+    id: int
+    dog_id: int
+    vaccine_type: str
+    expires_on: date
+
+    model_config = {"from_attributes": True}
+
+
+class QueueItem(BaseModel):
+    booking: BookingOut
+    dog_name: str
+    owner_name: str
 
 
 class OwnerOut(BaseModel):

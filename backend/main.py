@@ -34,14 +34,27 @@ from auth import (
     set_session_cookie,
     verify_password,
 )
+from booking_service import (
+    BookingError,
+    assign_kennel,
+    cancel_booking,
+    check_in,
+    check_out,
+    create_request,
+    decide,
+    log_care,
+    refresh_vaccination_status,
+)
 from db import (
     AuditLog,
     Booking,
     Dog,
     Facility,
     Incident,
+    Kennel,
     Membership,
     User,
+    VaccinationRecord,
     get_db,
     init_db,
 )
@@ -55,6 +68,7 @@ from schemas import (
     ChatRequest,
     CreateBookingRequest,
     CreateDogRequest,
+    DecisionIn,
     DogDetailOut,
     DogOut,
     FacilityChoice,
@@ -62,15 +76,25 @@ from schemas import (
     IncidentOut,
     InviteRequest,
     InviteResponse,
+    KennelIn,
+    KennelOut,
+    KennelPatch,
     LoginRequest,
     OwnerOut,
+    QueueItem,
     PasswordResetConfirm,
     PasswordResetRequest,
     SessionUser,
     SignupRequest,
     StatusUpdate,
     TodayBookingItem,
+    VaccinationIn,
+    VaccinationOut,
 )
+
+
+def _http(err: BookingError) -> HTTPException:
+    return HTTPException(status_code=err.status_code, detail=err.detail)
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
@@ -414,6 +438,17 @@ def register_dog(
     )
     db.add(dog)
     db.flush()
+    if body.vaccination_expires is not None:
+        db.add(
+            VaccinationRecord(
+                facility_id=current.facility_id,
+                dog_id=dog.id,
+                vaccine_type="core",
+                expires_on=body.vaccination_expires,
+            )
+        )
+        db.flush()
+        refresh_vaccination_status(db, dog)
     write_audit(
         db,
         facility_id=current.facility_id,
@@ -468,11 +503,6 @@ def get_dog(
 # Bookings
 # ---------------------------------------------------------------------------
 
-_CHECKING_IN_STATUSES = {"scheduled"}
-_IN_CARE_STATUSES = {"checked_in", "in_care"}
-_CHECKING_OUT_STATUSES = {"checked_out"}
-
-
 def _to_today_item(b: Booking) -> TodayBookingItem:
     return TodayBookingItem(
         booking_id=b.id,
@@ -505,11 +535,13 @@ def bookings_today(
     checking_out: list[TodayBookingItem] = []
     for b in rows:
         item = _to_today_item(b)
-        if b.status in _CHECKING_IN_STATUSES:
+        if b.status in ("confirmed", "scheduled"):
             checking_in.append(item)
-        elif b.status in _IN_CARE_STATUSES:
+        elif b.status in ("checked_in", "in_care") and b.end_date == today:
+            checking_out.append(item)
+        elif b.status in ("checked_in", "in_care"):
             in_care.append(item)
-        elif b.status in _CHECKING_OUT_STATUSES:
+        elif b.status == "checked_out" and b.end_date == today:
             checking_out.append(item)
     return BookingsTodayOut(
         checking_in=checking_in,
@@ -518,7 +550,11 @@ def bookings_today(
     )
 
 
-_ALLOWED_STATUSES = {"checked_in", "in_care", "checked_out"}
+def _booking_in_facility(db: Session, booking_id: int, facility_id: int) -> Booking:
+    booking = db.get(Booking, booking_id)
+    if booking is None or booking.facility_id != facility_id:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    return booking
 
 
 @app.patch("/bookings/{booking_id}/status", response_model=BookingOut)
@@ -528,22 +564,33 @@ def update_booking_status(
     db: Session = Depends(get_db),
     current: Principal = Depends(get_current_staff),
 ) -> BookingOut:
-    if body.status not in _ALLOWED_STATUSES:
-        raise HTTPException(status_code=422, detail=f"Invalid status: {body.status}")
-    booking = db.get(Booking, booking_id)
-    if booking is None or booking.facility_id != current.facility_id:
-        raise HTTPException(status_code=404, detail="Booking not found")
-    before = booking.status
-    booking.status = body.status
-    write_audit(
-        db,
-        facility_id=current.facility_id,
-        staff_id=current.id,
-        action="update_status",
-        target_type="booking",
-        target_id=booking.id,
-        details={"before": before, "after": body.status, "dog_id": booking.dog_id},
-    )
+    booking = _booking_in_facility(db, booking_id, current.facility_id)
+    try:
+        if body.status == "checked_in":
+            check_in(
+                db,
+                facility=current.facility,
+                booking=booking,
+                actor_id=current.id,
+                belongings=body.belongings,
+                diet_confirmed=body.diet_confirmed,
+                meds_confirmed=body.meds_confirmed,
+                vet_confirmed=body.vet_confirmed,
+                kennel_id=body.kennel_id,
+            )
+        elif body.status == "checked_out":
+            check_out(
+                db,
+                facility=current.facility,
+                booking=booking,
+                actor_id=current.id,
+                actor_role=current.role,
+                acknowledge_severe=body.acknowledge_severe,
+            )
+        else:
+            raise HTTPException(status_code=422, detail=f"Invalid status: {body.status}")
+    except BookingError as err:
+        raise _http(err) from err
     db.commit()
     db.refresh(booking)
     return BookingOut.model_validate(booking)
@@ -568,24 +615,20 @@ def update_booking_activity(
         raise HTTPException(
             status_code=422, detail=f"Invalid activity: {body.activity}"
         )
-    booking = db.get(Booking, booking_id)
-    if booking is None or booking.facility_id != current.facility_id:
-        raise HTTPException(status_code=404, detail="Booking not found")
-    now = datetime.now()
-    setattr(booking, field, now)
-    write_audit(
-        db,
-        facility_id=current.facility_id,
-        staff_id=current.id,
-        action="update_activity",
-        target_type="booking",
-        target_id=booking.id,
-        details={
-            "activity": body.activity,
-            "at": now.isoformat(),
-            "dog_id": booking.dog_id,
-        },
-    )
+    booking = _booking_in_facility(db, booking_id, current.facility_id)
+    kind = {"walk": "walk", "feed": "feed", "meds": "meds"}.get(body.activity)
+    if kind is None:
+        raise HTTPException(status_code=422, detail=f"Invalid activity: {body.activity}")
+    try:
+        log_care(
+            db,
+            facility_id=current.facility_id,
+            booking=booking,
+            actor_id=current.id,
+            kind=kind,
+        )
+    except BookingError as err:
+        raise _http(err) from err
     db.commit()
     db.refresh(booking)
     return BookingOut.model_validate(booking)
@@ -597,37 +640,118 @@ def create_booking(
     db: Session = Depends(get_db),
     current: Principal = Depends(require_role("parent")),
 ) -> BookingOut:
-    if body.end_date < body.start_date:
-        raise HTTPException(status_code=422, detail="end_date must be >= start_date")
     dog = _dog_in_facility(db, body.dog_id, current.facility_id)
     if dog.owner_user_id != current.id:
         raise HTTPException(
             status_code=403, detail="You can only book stays for your own dogs"
         )
-    booking = Booking(
-        facility_id=current.facility_id,
-        dog_id=dog.id,
-        start_date=body.start_date,
-        end_date=body.end_date,
-        status="scheduled",
-        kennel_id=body.kennel_id,
+    try:
+        booking = create_request(
+            db,
+            facility=current.facility,
+            dog=dog,
+            start=body.start_date,
+            end=body.end_date,
+            actor_id=current.id,
+            actor_role="parent",
+            waiver_accepted=body.waiver_accepted,
+        )
+    except BookingError as err:
+        raise _http(err) from err
+    db.commit()
+    db.refresh(booking)
+    return BookingOut.model_validate(booking)
+
+
+@app.get("/bookings/queue", response_model=list[QueueItem])
+def booking_queue(
+    db: Session = Depends(get_db),
+    current: Principal = Depends(get_current_staff),
+) -> list[QueueItem]:
+    rows = (
+        db.query(Booking)
+        .filter(
+            Booking.facility_id == current.facility_id,
+            Booking.status.in_(("requested", "waitlisted", "awaiting_payment")),
+        )
+        .order_by(Booking.start_date)
+        .all()
     )
-    db.add(booking)
-    db.flush()
-    write_audit(
-        db,
-        facility_id=current.facility_id,
-        staff_id=current.id,
-        action="create_booking",
-        target_type="booking",
-        target_id=booking.id,
-        details={
-            "dog_id": dog.id,
-            "start_date": body.start_date.isoformat(),
-            "end_date": body.end_date.isoformat(),
-            "via": "parent",
-        },
-    )
+    return [
+        QueueItem(
+            booking=BookingOut.model_validate(b),
+            dog_name=b.dog.name,
+            owner_name=b.dog.owner_name,
+        )
+        for b in rows
+    ]
+
+
+@app.post("/bookings/{booking_id}/decision", response_model=BookingOut)
+def booking_decision(
+    booking_id: int,
+    body: DecisionIn,
+    db: Session = Depends(get_db),
+    current: Principal = Depends(get_current_staff),
+) -> BookingOut:
+    booking = _booking_in_facility(db, booking_id, current.facility_id)
+    try:
+        decide(
+            db,
+            facility=current.facility,
+            booking=booking,
+            action=body.action,
+            actor_id=current.id,
+        )
+    except BookingError as err:
+        raise _http(err) from err
+    db.commit()
+    db.refresh(booking)
+    return BookingOut.model_validate(booking)
+
+
+@app.post("/bookings/{booking_id}/cancel", response_model=BookingOut)
+def booking_cancel(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    current: Principal = Depends(get_current_user),
+) -> BookingOut:
+    booking = _booking_in_facility(db, booking_id, current.facility_id)
+    if current.role == "parent" and booking.dog.owner_user_id != current.id:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    try:
+        cancel_booking(
+            db,
+            facility=current.facility,
+            booking=booking,
+            actor_id=current.id,
+            actor_role=current.role,
+        )
+    except BookingError as err:
+        raise _http(err) from err
+    db.commit()
+    db.refresh(booking)
+    return BookingOut.model_validate(booking)
+
+
+@app.post("/bookings/{booking_id}/kennel", response_model=BookingOut)
+def booking_assign_kennel(
+    booking_id: int,
+    kennel_id: int,
+    db: Session = Depends(get_db),
+    current: Principal = Depends(get_current_staff),
+) -> BookingOut:
+    booking = _booking_in_facility(db, booking_id, current.facility_id)
+    try:
+        assign_kennel(
+            db,
+            facility=current.facility,
+            booking=booking,
+            kennel_id=kennel_id,
+            actor_id=current.id,
+        )
+    except BookingError as err:
+        raise _http(err) from err
     db.commit()
     db.refresh(booking)
     return BookingOut.model_validate(booking)
@@ -679,6 +803,7 @@ def create_incident(
         type=body.type,
         severity=body.severity,
         description=body.description,
+        parent_visible=body.parent_visible or body.severity == "severe",
     )
     db.add(incident)
     db.flush()
@@ -810,6 +935,128 @@ def recent_audit_log(
         )
         for r in rows
     ]
+
+
+_KENNEL_STATUSES = {"available", "occupied", "reserved", "cleaning", "maintenance"}
+
+
+@app.get("/kennels", response_model=list[KennelOut])
+def list_kennels(
+    db: Session = Depends(get_db),
+    current: Principal = Depends(get_current_staff),
+) -> list[KennelOut]:
+    rows = (
+        db.query(Kennel)
+        .filter(Kennel.facility_id == current.facility_id)
+        .order_by(Kennel.name)
+        .all()
+    )
+    return [KennelOut.model_validate(k) for k in rows]
+
+
+@app.post("/kennels", response_model=KennelOut, status_code=201)
+def create_kennel(
+    body: KennelIn,
+    db: Session = Depends(get_db),
+    current: Principal = Depends(require_role("admin")),
+) -> KennelOut:
+    if body.status not in _KENNEL_STATUSES:
+        raise HTTPException(status_code=422, detail="Invalid kennel status")
+    kennel = Kennel(
+        facility_id=current.facility_id, name=body.name.strip(), status=body.status
+    )
+    db.add(kennel)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Kennel name already exists")
+    db.refresh(kennel)
+    return KennelOut.model_validate(kennel)
+
+
+@app.patch("/kennels/{kennel_id}", response_model=KennelOut)
+def patch_kennel(
+    kennel_id: int,
+    body: KennelPatch,
+    db: Session = Depends(get_db),
+    current: Principal = Depends(get_current_staff),
+) -> KennelOut:
+    if body.status not in _KENNEL_STATUSES:
+        raise HTTPException(status_code=422, detail="Invalid kennel status")
+    kennel = db.get(Kennel, kennel_id)
+    if kennel is None or kennel.facility_id != current.facility_id:
+        raise HTTPException(status_code=404, detail="Kennel not found")
+    kennel.status = body.status
+    db.commit()
+    db.refresh(kennel)
+    return KennelOut.model_validate(kennel)
+
+
+@app.post(
+    "/dogs/{dog_id}/vaccinations",
+    response_model=VaccinationOut,
+    status_code=201,
+)
+def add_vaccination(
+    dog_id: int,
+    body: VaccinationIn,
+    db: Session = Depends(get_db),
+    current: Principal = Depends(get_current_user),
+) -> VaccinationOut:
+    dog = _dog_in_facility(db, dog_id, current.facility_id)
+    if current.role == "parent" and dog.owner_user_id != current.id:
+        raise HTTPException(status_code=404, detail="Dog not found")
+    if current.role == "attendant":
+        raise HTTPException(status_code=403, detail="Only an admin can edit vaccinations")
+    row = VaccinationRecord(
+        facility_id=current.facility_id,
+        dog_id=dog.id,
+        vaccine_type=body.vaccine_type.strip(),
+        expires_on=body.expires_on,
+    )
+    db.add(row)
+    db.flush()
+    refresh_vaccination_status(db, dog)
+    write_audit(
+        db,
+        facility_id=current.facility_id,
+        staff_id=current.id,
+        action="update_vaccination",
+        target_type="dog",
+        target_id=dog.id,
+        details={"vaccine_type": row.vaccine_type, "expires_on": body.expires_on.isoformat()},
+    )
+    db.commit()
+    db.refresh(row)
+    return VaccinationOut.model_validate(row)
+
+
+@app.post("/bookings/override", response_model=BookingOut, status_code=201)
+def override_booking(
+    body: CreateBookingRequest,
+    db: Session = Depends(get_db),
+    current: Principal = Depends(require_role("admin")),
+) -> BookingOut:
+    dog = _dog_in_facility(db, body.dog_id, current.facility_id)
+    try:
+        booking = create_request(
+            db,
+            facility=current.facility,
+            dog=dog,
+            start=body.start_date,
+            end=body.end_date,
+            actor_id=current.id,
+            actor_role="admin",
+            waiver_accepted=True,
+            override=body.override,
+            override_reason=body.override_reason,
+        )
+    except BookingError as err:
+        raise _http(err) from err
+    db.commit()
+    db.refresh(booking)
+    return BookingOut.model_validate(booking)
 
 
 @app.post("/chat")

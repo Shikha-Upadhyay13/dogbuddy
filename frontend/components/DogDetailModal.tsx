@@ -39,6 +39,11 @@ export default function DogDetailModal({ item, onClose, onAction }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [belongings, setBelongings] = useState("");
+  const [dietOk, setDietOk] = useState(false);
+  const [medsOk, setMedsOk] = useState(false);
+  const [vetOk, setVetOk] = useState(false);
+  const [kennelId, setKennelId] = useState("");
 
   const bookingId = item.booking_id;
 
@@ -94,11 +99,20 @@ export default function DogDetailModal({ item, onClose, onAction }: Props) {
   const doStatus = async (
     status: "checked_in" | "checked_out",
     label: string,
+    acknowledge = false,
   ) => {
     if (actionBusy) return;
     setActionBusy(label);
     try {
-      await api.patch<Booking>(`/bookings/${bookingId}/status`, { status });
+      await api.patch<Booking>(`/bookings/${bookingId}/status`, {
+        status,
+        belongings,
+        diet_confirmed: dietOk,
+        meds_confirmed: medsOk,
+        vet_confirmed: vetOk,
+        kennel_id: kennelId ? Number(kennelId) : null,
+        acknowledge_severe: acknowledge,
+      });
       await loadDetail();
       onAction();
     } catch (err) {
@@ -194,14 +208,40 @@ export default function DogDetailModal({ item, onClose, onAction }: Props) {
             <h3 className="mb-2 mt-5 text-sm font-semibold text-muted">
               Status
             </h3>
-            <div className="flex gap-2">
-              {currentStatus === "scheduled" && (
-                <StatusBtn
-                  Icon={LogIn}
-                  label="Check In"
-                  busy={actionBusy === "Check In"}
-                  onClick={() => doStatus("checked_in", "Check In")}
-                />
+            <div className="flex flex-col gap-2">
+              {currentStatus === "confirmed" && (
+                <div className="space-y-2 rounded-lg border border-border p-3">
+                  <input
+                    value={belongings}
+                    onChange={(e) => setBelongings(e.target.value)}
+                    placeholder="Belongings"
+                    className="w-full rounded-md border border-border bg-bg px-2 py-1.5 text-sm"
+                  />
+                  <input
+                    value={kennelId}
+                    onChange={(e) => setKennelId(e.target.value)}
+                    placeholder="Kennel id (number)"
+                    className="w-full rounded-md border border-border bg-bg px-2 py-1.5 text-sm"
+                  />
+                  <label className="flex gap-2 text-sm">
+                    <input type="checkbox" checked={dietOk} onChange={(e) => setDietOk(e.target.checked)} />
+                    Diet confirmed
+                  </label>
+                  <label className="flex gap-2 text-sm">
+                    <input type="checkbox" checked={medsOk} onChange={(e) => setMedsOk(e.target.checked)} />
+                    Meds confirmed
+                  </label>
+                  <label className="flex gap-2 text-sm">
+                    <input type="checkbox" checked={vetOk} onChange={(e) => setVetOk(e.target.checked)} />
+                    Vet confirmed
+                  </label>
+                  <StatusBtn
+                    Icon={LogIn}
+                    label="Check In"
+                    busy={actionBusy === "Check In"}
+                    onClick={() => doStatus("checked_in", "Check In")}
+                  />
+                </div>
               )}
               {(currentStatus === "checked_in" ||
                 currentStatus === "in_care") && (

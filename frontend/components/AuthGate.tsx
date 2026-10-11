@@ -42,6 +42,8 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
           "/health",
           "/incidents",
           "/owners",
+          "/queue",
+          "/kennels",
         ];
         const isOwnerOnly =
           pathname === "/owner" || pathname?.startsWith("/owner/");

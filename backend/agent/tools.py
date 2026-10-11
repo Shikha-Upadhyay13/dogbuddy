@@ -22,7 +22,16 @@ from langchain_core.tools import tool
 from sqlalchemy import select
 
 from audit import write_audit
-from db import Booking, Dog, Incident, SessionLocal, User
+from booking_service import (
+    BookingError,
+    assign_kennel,
+    check_in,
+    check_out,
+    create_request,
+    kennel_conflict,
+    log_care,
+)
+from db import Booking, Dog, Facility, Incident, Kennel, SessionLocal, User
 
 load_dotenv()
 
@@ -254,15 +263,10 @@ def make_tools(staff_id: int, facility_id: int, role: str = "attendant") -> list
         finally:
             db.close()
 
-    _STATUS_ACTIONS = {
-        "check_in": "checked_in",
-        "in_care": "in_care",
-        "check_out": "checked_out",
-    }
     _ACTIVITY_ACTIONS = {
-        "walked": "last_walked_at",
-        "fed": "last_fed_at",
-        "meds_given": "last_meds_at",
+        "walked": "walk",
+        "fed": "feed",
+        "meds_given": "meds",
     }
 
     @tool
@@ -313,52 +317,97 @@ def make_tools(staff_id: int, facility_id: int, role: str = "attendant") -> list
             if booking is None:
                 return f"No booking found for {dog.name}."
 
-            if action in _STATUS_ACTIONS:
-                new_status = _STATUS_ACTIONS[action]
-                before = booking.status
-                booking.status = new_status
-                write_audit(
+            facility = db.get(Facility, facility_id)
+            if facility is None:
+                return "Error: facility not found."
+
+            if action == "in_care":
+                if booking.status != "checked_in":
+                    return (
+                        f"{dog.name} is not checked in. "
+                        "A dog is in care from check-in until check-out."
+                    )
+                log_care(
                     db,
                     facility_id=facility_id,
-                    staff_id=staff_id,
-                    action="update_status",
-                    target_type="booking",
-                    target_id=booking.id,
-                    details={
-                        "before": before,
-                        "after": new_status,
-                        "dog_id": dog.id,
-                        "via": "agent",
-                    },
+                    booking=booking,
+                    actor_id=staff_id,
+                    kind="note",
+                    note="Marked in care via chat",
                 )
                 db.commit()
-                return f"Updated {dog.name}: status {before} -> {new_status}."
+                return f"{dog.name} is in care (checked in)."
+
+            if action == "check_in":
+                if not dog.diet or not dog.vet_contact:
+                    return (
+                        f"Cannot check {dog.name} in from chat until diet and vet "
+                        "contact are on the record. Confirm them on the dashboard."
+                    )
+                kennel_id = booking.assigned_kennel_id
+                if kennel_id is None:
+                    for kennel in (
+                        db.query(Kennel)
+                        .filter(Kennel.facility_id == facility_id)
+                        .order_by(Kennel.name)
+                        .all()
+                    ):
+                        if kennel.status == "maintenance":
+                            continue
+                        if not kennel_conflict(
+                            db,
+                            kennel.id,
+                            booking.start_date,
+                            booking.end_date,
+                            booking.id,
+                        ):
+                            kennel_id = kennel.id
+                            break
+                check_in(
+                    db,
+                    facility=facility,
+                    booking=booking,
+                    actor_id=staff_id,
+                    belongings="Recorded via chat",
+                    diet_confirmed=True,
+                    meds_confirmed=True,
+                    vet_confirmed=True,
+                    kennel_id=kennel_id,
+                )
+                db.commit()
+                return f"Checked in {dog.name}."
+
+            if action == "check_out":
+                check_out(
+                    db,
+                    facility=facility,
+                    booking=booking,
+                    actor_id=staff_id,
+                    actor_role=role,
+                    acknowledge_severe=False,
+                )
+                db.commit()
+                return f"Checked out {dog.name}."
 
             if action in _ACTIVITY_ACTIONS:
-                field = _ACTIVITY_ACTIONS[action]
-                now = datetime.now()
-                setattr(booking, field, now)
-                write_audit(
+                log_care(
                     db,
                     facility_id=facility_id,
-                    staff_id=staff_id,
-                    action="update_activity",
-                    target_type="booking",
-                    target_id=booking.id,
-                    details={
-                        "activity": action,
-                        "at": now.isoformat(),
-                        "dog_id": dog.id,
-                        "via": "agent",
-                    },
+                    booking=booking,
+                    actor_id=staff_id,
+                    kind=_ACTIVITY_ACTIONS[action],
                 )
                 db.commit()
+                now = datetime.now()
                 return f"Recorded for {dog.name}: {action} at {now.strftime('%H:%M')}."
 
             return (
                 f"Error: unknown action '{action}'. "
                 "Valid: check_in, in_care, check_out, walked, fed, meds_given."
             )
+        except BookingError as err:
+            db.rollback()
+            return err.detail
         except Exception as e:
             db.rollback()
             return f"Could not update {dog_name} - {e}."
@@ -597,35 +646,44 @@ def make_tools(staff_id: int, facility_id: int, role: str = "attendant") -> list
             if dog.owner_user_id != user.id:
                 return f"'{dog.name}' isn't on your profile - you can only book stays for your own dogs."
 
-            booking = Booking(
-                facility_id=facility_id,
-                dog_id=dog.id,
-                start_date=start,
-                end_date=end,
-                status="scheduled",
-                kennel_id=kennel_id,
-            )
-            db.add(booking)
-            db.flush()
-            write_audit(
+            facility = db.get(Facility, facility_id)
+            if facility is None:
+                return "Error: facility not found."
+            booking = create_request(
                 db,
-                facility_id=facility_id,
-                staff_id=staff_id,
-                action="create_booking",
-                target_type="booking",
-                target_id=booking.id,
-                details={
-                    "dog_id": dog.id,
-                    "start_date": start.isoformat(),
-                    "end_date": end.isoformat(),
-                    "via": "agent",
-                },
+                facility=facility,
+                dog=dog,
+                start=start,
+                end=end,
+                actor_id=staff_id,
+                actor_role="parent",
+                waiver_accepted=True,
             )
+            if kennel_id:
+                kennel = (
+                    db.query(Kennel)
+                    .filter(
+                        Kennel.facility_id == facility_id,
+                        Kennel.name == kennel_id,
+                    )
+                    .one_or_none()
+                )
+                if kennel is not None and booking.status in ("confirmed", "checked_in"):
+                    assign_kennel(
+                        db,
+                        facility=facility,
+                        booking=booking,
+                        kennel_id=kennel.id,
+                        actor_id=staff_id,
+                    )
             db.commit()
             return (
-                f"Booked stay #{booking.id} for {dog.name}: "
-                f"{start.isoformat()} to {end.isoformat()}."
+                f"Requested stay #{booking.id} for {dog.name}: "
+                f"{start.isoformat()} to {end.isoformat()} (status {booking.status})."
             )
+        except BookingError as err:
+            db.rollback()
+            return err.detail
         except Exception as e:
             db.rollback()
             return f"Could not create booking - {e}."

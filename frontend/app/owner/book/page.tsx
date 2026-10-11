@@ -34,6 +34,7 @@ export default function BookStayPage() {
   const [start, setStart] = useState(todayISO());
   const [end, setEnd] = useState(addDaysISO(todayISO(), 7));
   const [kennel, setKennel] = useState("");
+  const [waiver, setWaiver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,6 +67,7 @@ export default function BookStayPage() {
         start_date: start,
         end_date: end,
         kennel_id: kennel || null,
+        waiver_accepted: waiver,
       });
       router.replace("/owner/dashboard");
     } catch (err) {
@@ -175,6 +177,17 @@ export default function BookStayPage() {
                 className={inputCls}
               />
             </Field>
+
+            <label className="flex items-start gap-2 text-sm text-text">
+              <input
+                type="checkbox"
+                checked={waiver}
+                onChange={(e) => setWaiver(e.target.checked)}
+                className="mt-1"
+                required
+              />
+              I accept the facility waiver, including emergency vet contact.
+            </label>
 
             {error && (
               <div className="flex items-center gap-2 rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">

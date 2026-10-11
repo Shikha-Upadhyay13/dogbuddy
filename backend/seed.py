@@ -15,12 +15,15 @@ import bcrypt
 from db import (
     Base,
     Booking,
+    CareLog,
     Dog,
     Facility,
     Incident,
+    Kennel,
     Membership,
     SessionLocal,
     User,
+    VaccinationRecord,
     engine,
 )
 
@@ -45,6 +48,14 @@ def seed_facility(session) -> tuple[Facility, User]:
         state="Karnataka",
         phone="08040001234",
         timezone="Asia/Kolkata",
+        booking_mode="request",
+        deposit_percent=50,
+        cancellation_window_hours=24,
+        max_dogs=30,
+        require_vaccination=True,
+        waiver_text="I confirm the facility may board my dog and contact the vet in an emergency.",
+        waiver_version=1,
+        nightly_rate_paise=150000,
     )
     session.add(facility)
     session.flush()
@@ -226,6 +237,14 @@ def seed_dogs_and_bookings(session, facility_id: int):
         )
         session.add(dog)
         session.flush()
+        session.add(
+            VaccinationRecord(
+                facility_id=facility_id,
+                dog_id=dog.id,
+                vaccine_type="core",
+                expires_on=dog.vaccination_expires or TODAY,
+            )
+        )
         dogs_by_name[name] = dog
 
         if status == "scheduled":
@@ -262,18 +281,54 @@ def seed_dogs_and_bookings(session, facility_id: int):
             last_fed = NOW - timedelta(hours=2)
             last_meds = None
 
+        stored = "checked_in" if status in ("checked_in", "in_care") else (
+            "confirmed" if status == "scheduled" else status
+        )
+        kennel_name = f"K-{kennel_counter:02d}" if status != "scheduled" else None
+        kennel = None
+        if kennel_name:
+            kennel = Kennel(
+                facility_id=facility_id,
+                name=kennel_name,
+                status="occupied" if stored == "checked_in" else "cleaning",
+            )
+            session.add(kennel)
+            session.flush()
         booking = Booking(
             facility_id=facility_id,
             dog_id=dog.id,
             start_date=start,
             end_date=end,
-            status=status,
-            kennel_id=f"K-{kennel_counter:02d}" if status != "scheduled" else None,
+            status=stored,
+            kennel_id=kennel_name,
+            assigned_kennel_id=kennel.id if kennel else None,
             last_walked_at=last_walked,
             last_fed_at=last_fed,
             last_meds_at=last_meds,
+            diet_confirmed=stored == "checked_in",
+            meds_confirmed=stored == "checked_in",
+            vet_confirmed=stored == "checked_in",
+            waiver_version_accepted=1,
         )
         session.add(booking)
+        session.flush()
+        for kind, ts in (
+            ("walk", last_walked),
+            ("feed", last_fed),
+            ("meds", last_meds),
+        ):
+            if ts is None:
+                continue
+            session.add(
+                CareLog(
+                    facility_id=facility_id,
+                    booking_id=booking.id,
+                    dog_id=dog.id,
+                    staff_id=1,
+                    kind=kind,
+                    created_at=ts,
+                )
+            )
         kennel_counter += 1
 
     session.flush()

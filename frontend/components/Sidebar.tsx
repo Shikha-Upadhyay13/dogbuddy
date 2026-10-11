@@ -14,6 +14,8 @@ import {
   LogOut,
   PawPrint,
   CalendarDays,
+  LayoutGrid,
+  Inbox,
   Plus,
   Trash2,
   Stethoscope,
@@ -35,6 +37,8 @@ import Notifications from "./Notifications";
 
 const STAFF_TABS = [
   { href: "/dashboard", label: "Today", Icon: Home, hint: "D" },
+  { href: "/queue", label: "Queue", Icon: Inbox, hint: "Q" },
+  { href: "/kennels", label: "Kennels", Icon: LayoutGrid, hint: "K" },
   { href: "/health", label: "Health", Icon: Stethoscope, hint: "H" },
   { href: "/incidents", label: "Incidents", Icon: AlertTriangle, hint: "I" },
   { href: "/owners", label: "Owners", Icon: Users, hint: "O" },

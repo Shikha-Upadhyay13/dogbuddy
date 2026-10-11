@@ -13,6 +13,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     ForeignKey,
@@ -85,6 +86,18 @@ class Facility(Base):
     timezone: Mapped[str] = mapped_column(
         String, nullable=False, default="Asia/Kolkata"
     )
+    booking_mode: Mapped[str] = mapped_column(String, nullable=False, default="request")
+    deposit_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cancellation_window_hours: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=24
+    )
+    max_dogs: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    require_vaccination: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    waiver_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    waiver_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    nightly_rate_paise: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
 
     memberships: Mapped[list["Membership"]] = relationship(back_populates="facility")
@@ -151,6 +164,9 @@ class Dog(Base):
 
     bookings: Mapped[list["Booking"]] = relationship(back_populates="dog")
     incidents: Mapped[list["Incident"]] = relationship(back_populates="dog")
+    vaccinations: Mapped[list["VaccinationRecord"]] = relationship(
+        back_populates="dog"
+    )
 
 
 class Booking(Base):
@@ -163,6 +179,18 @@ class Booking(Base):
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[str] = mapped_column(String, nullable=False)
     kennel_id: Mapped[Optional[str]] = mapped_column(String)
+    assigned_kennel_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("kennels.id"), nullable=True
+    )
+    belongings: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    diet_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    meds_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    vet_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    waiver_version_accepted: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    vaccination_override_by: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    vaccination_override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     last_walked_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     last_fed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     last_meds_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
@@ -181,9 +209,55 @@ class Incident(Base):
     type: Mapped[str] = mapped_column(String, nullable=False)
     severity: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(String, nullable=False)
+    parent_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    acknowledged_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    acknowledged_by: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
 
     dog: Mapped["Dog"] = relationship(back_populates="incidents")
+
+
+class Kennel(Base):
+    __tablename__ = "kennels"
+    __table_args__ = (
+        UniqueConstraint("facility_id", "name", name="uq_kennel_facility_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="available")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
+
+
+class VaccinationRecord(Base):
+    __tablename__ = "vaccination_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    dog_id: Mapped[int] = mapped_column(ForeignKey("dogs.id"), nullable=False)
+    vaccine_type: Mapped[str] = mapped_column(String, nullable=False)
+    expires_on: Mapped[date] = mapped_column(Date, nullable=False)
+    file_key: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
+
+    dog: Mapped["Dog"] = relationship(back_populates="vaccinations")
+
+
+class CareLog(Base):
+    __tablename__ = "care_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), nullable=False)
+    dog_id: Mapped[int] = mapped_column(ForeignKey("dogs.id"), nullable=False)
+    staff_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    kind: Mapped[str] = mapped_column(String, nullable=False)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    photo_key: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
 
 
 class AuditLog(Base):
