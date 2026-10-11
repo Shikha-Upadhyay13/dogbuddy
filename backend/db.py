@@ -98,6 +98,8 @@ class Facility(Base):
     waiver_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
     waiver_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     nightly_rate_paise: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    whatsapp_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    email_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
 
     memberships: Mapped[list["Membership"]] = relationship(back_populates="facility")
@@ -257,6 +259,87 @@ class CareLog(Base):
     kind: Mapped[str] = mapped_column(String, nullable=False)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     photo_key: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
+
+
+class FacilityAddon(Base):
+    __tablename__ = "facility_addons"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    price_paise: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    recipient_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    type: Mapped[str] = mapped_column(String, nullable=False)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    link: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
+
+
+class NotificationDelivery(Base):
+    __tablename__ = "notification_deliveries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    notification_id: Mapped[int] = mapped_column(
+        ForeignKey("notifications.id"), nullable=False
+    )
+    channel: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
+    detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
+
+
+class NotificationPreference(Base):
+    __tablename__ = "notification_preferences"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "facility_id",
+            "category",
+            name="uq_pref_user_facility_category",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    category: Mapped[str] = mapped_column(String, nullable=False)
+    whatsapp: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    email: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class Job(Base):
+    __tablename__ = "jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String, nullable=False)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
+    run_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class ReportCard(Base):
+    __tablename__ = "report_cards"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
+    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), nullable=False)
+    day: Mapped[date] = mapped_column(Date, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
 
 

@@ -34,6 +34,7 @@ from auth import (
     set_session_cookie,
     verify_password,
 )
+import portal
 from booking_service import (
     BookingError,
     assign_kennel,
@@ -98,7 +99,8 @@ def _http(err: BookingError) -> HTTPException:
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
-app = FastAPI(title="DogBuddy API", version="0.3.0")
+app = FastAPI(title="DogBuddy API", version="0.4.0")
+app.include_router(portal.router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -116,6 +118,24 @@ app.add_middleware(
 @app.on_event("startup")
 async def on_startup() -> None:
     init_db()
+    if os.getenv("DOGBUDDY_SKIP_JOBS") != "1":
+        import asyncio
+
+        from db import SessionLocal
+        from notify import process_due_jobs, scan_due_reminders
+
+        async def _jobs() -> None:
+            while True:
+                await asyncio.sleep(5)
+                job_db = SessionLocal()
+                try:
+                    scan_due_reminders(job_db)
+                    process_due_jobs(job_db)
+                    job_db.commit()
+                finally:
+                    job_db.close()
+
+        asyncio.create_task(_jobs())
     if os.getenv("DOGBUDDY_SKIP_AGENT") == "1":
         return
     from agent.graph import init_checkpointer
@@ -657,7 +677,37 @@ def create_booking(
             waiver_accepted=body.waiver_accepted,
         )
     except BookingError as err:
+        if "Vaccination" in err.detail:
+            from notify import emit, staff_users
+
+            emit(
+                db,
+                facility=current.facility,
+                recipients=staff_users(db, current.facility_id),
+                event="booking_blocked",
+                title=f"Vaccination blocked a request for {dog.name}",
+                body=err.detail,
+            )
+            db.commit()
         raise _http(err) from err
+    from notify import emit, staff_users
+
+    emit(
+        db,
+        facility=current.facility,
+        recipients=staff_users(db, current.facility_id),
+        event="booking_requested",
+        title=f"New request for {dog.name}",
+        body=f"{body.start_date.isoformat()} to {body.end_date.isoformat()}",
+    )
+    emit(
+        db,
+        facility=current.facility,
+        recipients=[current.user],
+        event="booking_requested",
+        title="Stay request received",
+        body=f"We have your request for {dog.name}.",
+    )
     db.commit()
     db.refresh(booking)
     return BookingOut.model_validate(booking)
@@ -705,6 +755,24 @@ def booking_decision(
         )
     except BookingError as err:
         raise _http(err) from err
+    from notify import emit
+
+    parent = db.get(User, booking.dog.owner_user_id) if booking.dog.owner_user_id else None
+    event = {
+        "confirmed": "booking_confirmed",
+        "awaiting_payment": "booking_confirmed",
+        "declined": "booking_declined",
+        "waitlisted": "waitlist_opened",
+    }.get(booking.status)
+    if parent is not None and event:
+        emit(
+            db,
+            facility=current.facility,
+            recipients=[parent],
+            event=event,
+            title=f"{booking.dog.name}: {booking.status.replace('_', ' ')}",
+            body=f"Your stay is now {booking.status.replace('_', ' ')}.",
+        )
     db.commit()
     db.refresh(booking)
     return BookingOut.model_validate(booking)
@@ -729,9 +797,63 @@ def booking_cancel(
         )
     except BookingError as err:
         raise _http(err) from err
+    from notify import emit, staff_users
+
+    emit(
+        db,
+        facility=current.facility,
+        recipients=staff_users(db, current.facility_id),
+        event="booking_cancelled",
+        title=f"Cancelled: {booking.dog.name}",
+        body=f"Stay {booking.start_date.isoformat()} to {booking.end_date.isoformat()} was cancelled.",
+        link=f"/bookings/{booking.id}",
+    )
+    if current.role != "parent" and booking.dog.owner_user_id:
+        parent = db.get(User, booking.dog.owner_user_id)
+        if parent is not None:
+            emit(
+                db,
+                facility=current.facility,
+                recipients=[parent],
+                event="booking_cancelled",
+                title=f"Stay cancelled for {booking.dog.name}",
+                body="The facility cancelled this stay.",
+                link="/owner/dashboard",
+            )
     db.commit()
     db.refresh(booking)
     return BookingOut.model_validate(booking)
+
+
+@app.post("/bookings/{booking_id}/arrived")
+def parent_arrived(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    current: Principal = Depends(require_role("parent")),
+) -> dict:
+    booking = _booking_in_facility(db, booking_id, current.facility_id)
+    if booking.dog.owner_user_id != current.id:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.start_date != date.today() or booking.status not in (
+        "confirmed",
+        "awaiting_payment",
+    ):
+        raise HTTPException(
+            status_code=409, detail="Arrival can be marked on the drop-off day"
+        )
+    from notify import emit, staff_users
+
+    emit(
+        db,
+        facility=current.facility,
+        recipients=staff_users(db, current.facility_id),
+        event="parent_arrived",
+        title=f"{booking.dog.owner_name} is here with {booking.dog.name}",
+        body="The parent marked arrival for today's drop-off.",
+        link=f"/bookings/{booking.id}",
+    )
+    db.commit()
+    return {"ok": True}
 
 
 @app.post("/bookings/{booking_id}/kennel", response_model=BookingOut)
@@ -807,6 +929,30 @@ def create_incident(
     )
     db.add(incident)
     db.flush()
+    from notify import emit, staff_users
+
+    recipients = staff_users(db, current.facility_id)
+    parent = db.get(User, dog.owner_user_id) if dog.owner_user_id else None
+    if incident.severity == "severe":
+        if parent is not None:
+            recipients = recipients + [parent]
+        emit(
+            db,
+            facility=current.facility,
+            recipients=recipients,
+            event="severe_incident",
+            title=f"Severe incident: {dog.name}",
+            body=incident.description,
+        )
+    elif incident.parent_visible and parent is not None:
+        emit(
+            db,
+            facility=current.facility,
+            recipients=[parent],
+            event="incident_note",
+            title=f"Note about {dog.name}",
+            body=incident.description,
+        )
     write_audit(
         db,
         facility_id=current.facility_id,

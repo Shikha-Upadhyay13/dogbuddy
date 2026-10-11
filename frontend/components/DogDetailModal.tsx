@@ -44,6 +44,8 @@ export default function DogDetailModal({ item, onClose, onAction }: Props) {
   const [medsOk, setMedsOk] = useState(false);
   const [vetOk, setVetOk] = useState(false);
   const [kennelId, setKennelId] = useState("");
+  const [card, setCard] = useState<string>("");
+  const [cardNote, setCardNote] = useState("");
 
   const bookingId = item.booking_id;
 
@@ -52,6 +54,12 @@ export default function DogDetailModal({ item, onClose, onAction }: Props) {
       const d = await api.get<DogDetail>(`/dogs/${item.dog.id}`);
       setDetail(d);
       setError(null);
+      if ((d.current_booking?.status ?? item.status) === "checked_in") {
+        const preview = await api.get<{ summary: string }>(
+          `/bookings/${bookingId}/report-card`,
+        );
+        setCard(preview.summary);
+      }
     } catch (err) {
       setError(
         err instanceof ApiError ? err.detail : "Could not load dog details",
@@ -256,6 +264,73 @@ export default function DogDetailModal({ item, onClose, onAction }: Props) {
                 <p className="text-sm text-muted">Already checked out.</p>
               )}
             </div>
+
+            {(currentStatus === "checked_in" || currentStatus === "in_care") && (
+              <div className="mt-5 space-y-2 rounded-lg border border-border p-3">
+                <h3 className="text-sm font-semibold text-muted">Report card</h3>
+                <p className="whitespace-pre-wrap text-sm text-text">
+                  {card || "No care logs yet today."}
+                </p>
+                <input
+                  value={cardNote}
+                  onChange={(e) => setCardNote(e.target.value)}
+                  placeholder="Note for the parent"
+                  className="w-full rounded-md border border-border bg-bg px-2 py-1.5 text-sm"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <label className="inline-flex cursor-pointer items-center rounded-md border border-border px-3 py-1.5 text-sm">
+                    Add photo
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const body = new FormData();
+                        body.append("photo", file);
+                        body.append("note", cardNote || "Photo");
+                        setActionBusy("photo");
+                        void api
+                          .upload(`/bookings/${bookingId}/photos`, body)
+                          .then(() => loadDetail())
+                          .catch((err) =>
+                            setError(
+                              err instanceof ApiError
+                                ? err.detail
+                                : "Photo upload failed",
+                            ),
+                          )
+                          .finally(() => setActionBusy(null));
+                      }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={actionBusy === "card"}
+                    onClick={() => {
+                      setActionBusy("card");
+                      void api
+                        .post(`/bookings/${bookingId}/report-cards/send`, {
+                          note: cardNote,
+                        })
+                        .then(() => setError(null))
+                        .catch((err) =>
+                          setError(
+                            err instanceof ApiError
+                              ? err.detail
+                              : "Could not send the report card",
+                          ),
+                        )
+                        .finally(() => setActionBusy(null));
+                    }}
+                    className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-bg"
+                  >
+                    {actionBusy === "card" ? "Sending..." : "Send to parent"}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <hr className="my-5 border-border" />
 

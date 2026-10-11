@@ -9,13 +9,13 @@ import {
   CalendarPlus,
   LogOut,
   MessageSquare,
+  Settings,
   Loader2,
   AlertCircle,
 } from "lucide-react";
 
 import AuthGate from "@/components/AuthGate";
 import { api, ApiError } from "@/lib/api";
-import { api } from "@/lib/api";
 import { clearAuth, getUser } from "@/lib/auth";
 import type { Booking, Dog } from "@/lib/types";
 
@@ -27,6 +27,8 @@ export default function OwnerDashboardPage() {
   const [bookings, setBookings] = useState<Booking[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [cards, setCards] = useState<Record<number, string>>({});
+  const [arrived, setArrived] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -37,6 +39,20 @@ export default function OwnerDashboardPage() {
         ]);
         setDogs(d);
         setBookings(b);
+        const active = b.filter((row) => row.status === "checked_in");
+        const previews = await Promise.all(
+          active.map(async (row) => {
+            try {
+              const card = await api.get<{ summary: string }>(
+                `/bookings/${row.id}/report-card`,
+              );
+              return [row.id, card.summary] as const;
+            } catch {
+              return [row.id, ""] as const;
+            }
+          }),
+        );
+        setCards(Object.fromEntries(previews));
       } catch (err) {
         setError(err instanceof ApiError ? err.detail : "Failed to load");
       } finally {
@@ -71,6 +87,14 @@ export default function OwnerDashboardPage() {
               Manage your dogs and book stays for when you&apos;re away.
             </p>
           </div>
+          <div className="flex items-center gap-2">
+          <Link
+            href="/settings/account"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm text-text transition hover:border-accent hover:text-accent"
+          >
+            <Settings className="h-4 w-4" />
+            Settings
+          </Link>
           <button
             onClick={onLogout}
             className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm text-text transition hover:border-accent hover:text-accent"
@@ -78,6 +102,7 @@ export default function OwnerDashboardPage() {
             <LogOut className="h-4 w-4" />
             Logout
           </button>
+          </div>
         </header>
 
         {error && (
@@ -175,8 +200,32 @@ export default function OwnerDashboardPage() {
                       <span className="text-muted">
                         {b.start_date} → {b.end_date}
                       </span>
-                      <span className="rounded border border-border bg-surface px-1.5 py-0.5 text-text">
-                        {b.status}
+                      <span className="flex items-center gap-2">
+                        {b.start_date === new Date().toISOString().slice(0, 10) &&
+                          (b.status === "confirmed" ||
+                            b.status === "awaiting_payment") && (
+                            <button
+                              type="button"
+                              className="rounded border border-accent px-1.5 py-0.5 text-accent"
+                              onClick={() => {
+                                setArrived(b.id);
+                                void api
+                                  .post(`/bookings/${b.id}/arrived`, {})
+                                  .catch((err) =>
+                                    setError(
+                                      err instanceof ApiError
+                                        ? err.detail
+                                        : "Could not mark arrival",
+                                    ),
+                                  );
+                              }}
+                            >
+                              {arrived === b.id ? "We let them know" : "I'm here"}
+                            </button>
+                          )}
+                        <span className="rounded border border-border bg-surface px-1.5 py-0.5 text-text">
+                          {b.status}
+                        </span>
                       </span>
                     </li>
                   ))}
@@ -187,6 +236,26 @@ export default function OwnerDashboardPage() {
                 </p>
               )}
             </section>
+
+            {bookings && bookings.some((b) => b.status === "checked_in") && (
+              <section>
+                <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+                  Today&apos;s report card
+                </h2>
+                <ul className="space-y-3">
+                  {bookings
+                    .filter((b) => b.status === "checked_in")
+                    .map((b) => (
+                      <li
+                        key={b.id}
+                        className="whitespace-pre-wrap rounded-lg border border-border bg-bg px-4 py-3 text-sm text-text"
+                      >
+                        {cards[b.id] || "No update yet today."}
+                      </li>
+                    ))}
+                </ul>
+              </section>
+            )}
 
             {/* Chat call-to-action */}
             <Link

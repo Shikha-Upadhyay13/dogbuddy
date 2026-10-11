@@ -21,6 +21,7 @@ import {
   Stethoscope,
   AlertTriangle,
   Users,
+  Settings,
 } from "lucide-react";
 
 import { api } from "@/lib/api";
@@ -156,6 +157,18 @@ export default function Sidebar() {
             </Link>
           );
         })}
+
+        <Link
+          href="/settings/account"
+          className={`mt-4 flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm ${
+            pathname?.startsWith("/settings")
+              ? "bg-surface text-text"
+              : "text-muted hover:bg-surface/60 hover:text-text"
+          }`}
+        >
+          <Settings className="h-4 w-4" />
+          Settings
+        </Link>
 
         {/* Chat history — only visible on /chat */}
         {onChat && (

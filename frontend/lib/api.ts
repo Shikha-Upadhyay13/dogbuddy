@@ -75,6 +75,10 @@ export const api = {
     request<T>(path, { method: "POST", body: JSON.stringify(body), ...opts }),
   patch: <T>(path: string, body: unknown, opts: ApiOptions = {}) =>
     request<T>(path, { method: "PATCH", body: JSON.stringify(body), ...opts }),
+  put: <T>(path: string, body: unknown, opts: ApiOptions = {}) =>
+    request<T>(path, { method: "PUT", body: JSON.stringify(body), ...opts }),
+  upload: <T>(path: string, body: FormData, opts: ApiOptions = {}) =>
+    request<T>(path, { method: "POST", body, ...opts }),
 };
 
 export { BASE as API_BASE };
